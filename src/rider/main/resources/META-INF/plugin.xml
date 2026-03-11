@@ -12,4 +12,12 @@
 ]]>
   </description>
 
+  <actions>
+    <action id="LLMask.HelloWorld"
+            class="com.jetbrains.rider.plugins.llmask.HelloWorldAction"
+            text="Hello World (LLMask)">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </action>
+  </actions>
+
 </idea-plugin>

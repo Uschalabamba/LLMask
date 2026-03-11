@@ -6,7 +6,6 @@ build
 output
 .gradle
 .tmp
-.claude
 
 # User-specific files
 *.suo
