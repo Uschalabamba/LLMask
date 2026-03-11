@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "WebFetch(domain:www.jetbrains.com)"
+      "WebFetch(domain:www.jetbrains.com)",
+      "Bash(dotnet build src/dotnet/ReSharperPlugin.LLMask/ReSharperPlugin.LLMask.csproj --configuration Debug)",
+      "Bash(dotnet build ReSharperPlugin.LLMask.sln --configuration Debug)"
     ]
   }
 }

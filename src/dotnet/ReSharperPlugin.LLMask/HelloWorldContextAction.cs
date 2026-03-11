@@ -1,5 +1,6 @@
 using System;
 using JetBrains.Application.Progress;
+using JetBrains.Application.Settings;
 using JetBrains.Diagnostics;
 using JetBrains.ProjectModel;
 using JetBrains.ReSharper.Feature.Services.ContextActions;
@@ -8,6 +9,7 @@ using JetBrains.ReSharper.Psi.Tree;
 using JetBrains.TextControl;
 using JetBrains.Util;
 using ReSharperPlugin.LLMask.Obfuscation;
+using ReSharperPlugin.LLMask.Settings;
 
 namespace ReSharperPlugin.LLMask;
 
@@ -24,13 +26,17 @@ public class HelloWorldContextAction(ICSharpContextActionDataProvider provider) 
     public override string Text => "LLMask: Obfuscate and copy to clipboard";
 
     public override bool IsAvailable(IUserDataHolder cache)
-    {
-        return provider.GetSelectedElement<ITreeNode>() != null
-               && !provider.DocumentSelection.IsEmpty;
-    }
+        => provider.GetSelectedElement<ITreeNode>() != null
+           && !provider.DocumentSelection.IsEmpty;
 
     protected override Action<ITextControl> ExecutePsiTransaction(ISolution solution, IProgressIndicator progress)
     {
+        var settings = solution.GetComponent<ISettingsStore>()
+                               .BindToContextTransient(ContextRange.ApplicationWide)
+                               .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
+        if (!settings.UseStringObfuscation)
+            return null;
+
         var selectionRange = provider.DocumentSelection;
         return textControl =>
         {
