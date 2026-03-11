@@ -5,42 +5,41 @@ using JetBrains.Application.UI.Actions;
 using JetBrains.Application.UI.ActionsRevised.Menu;
 using JetBrains.Diagnostics;
 
-namespace ReSharperPlugin.LLMask
+namespace ReSharperPlugin.LLMask;
+
+[Action("LLMask.HelloWorld", "LLMask: Hello World")]
+public class HelloWorldAction : IExecutableAction
 {
-    [Action("LLMask.HelloWorld", "LLMask: Hello World")]
-    public class HelloWorldAction : IExecutableAction
+    private static readonly ILog Log = JetBrains.Diagnostics.Log.GetLog<HelloWorldAction>();
+
+    public bool Update(IDataContext context, ActionPresentation presentation, DelegateUpdate nextUpdate)
     {
-        private static readonly ILog Log = JetBrains.Diagnostics.Log.GetLog<HelloWorldAction>();
+        return true;
+    }
 
-        public bool Update(IDataContext context, ActionPresentation presentation, DelegateUpdate nextUpdate)
+    public void Execute(IDataContext context, DelegateExecute nextExecute)
+    {
+        Log.Info("LLMask HelloWorldAction executed");
+        var window = new Window
         {
-            return true;
-        }
+            Title = "LLMask",
+            Width = 320,
+            Height = 120,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ResizeMode = ResizeMode.NoResize
+        };
 
-        public void Execute(IDataContext context, DelegateExecute nextExecute)
+        var textBox = new TextBox
         {
-            Log.Info("LLMask HelloWorldAction executed");
-            var window = new Window
-            {
-                Title = "LLMask",
-                Width = 320,
-                Height = 120,
-                WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                ResizeMode = ResizeMode.NoResize
-            };
+            Text = "Hello World",
+            IsReadOnly = true,
+            Margin = new Thickness(10),
+            FontSize = 14,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
 
-            var textBox = new TextBox
-            {
-                Text = "Hello World",
-                IsReadOnly = true,
-                Margin = new Thickness(10),
-                FontSize = 14,
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                VerticalContentAlignment = VerticalAlignment.Center
-            };
-
-            window.Content = textBox;
-            window.ShowDialog();
-        }
+        window.Content = textBox;
+        window.ShowDialog();
     }
 }
