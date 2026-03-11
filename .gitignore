@@ -1,32 +1,24 @@
-# Prerequisites
-*.d
+# Build artifacts
+/.intellijPlatform/
+[Bb]in/
+[Oo]bj/
+build
+output
+.gradle
+.tmp
+.claude
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# User-specific files
+*.suo
+*.user
+*.sln.docstates
+*.cache
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+# IDEs
+/.idea/*.iml
+/.idea/*.xml
+/.idea/.idea.*/*.iml
+/.idea/.idea.*/.idea/*.xml
+.vs
+_ReSharper*
+_dotTrace*
