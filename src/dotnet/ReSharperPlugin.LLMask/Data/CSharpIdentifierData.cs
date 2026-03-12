@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace ReSharperPlugin.LLMask.Data;
 
 /// <summary>
@@ -67,4 +70,26 @@ public static class CSharpIdentifierData
         "WeakReference," +
         // Common attribute names used without the 'Attribute' suffix
         "Flags,NonSerialized,Obsolete,Serializable,ThreadStatic";
+    
+    // Root namespace segments whose using directives are preserved verbatim
+    // because they don't reveal proprietary information.
+    internal static readonly HashSet<string> WellKnownNamespaceRoots = new(StringComparer.Ordinal)
+    {
+        // BCL / runtime
+        "System", "Microsoft", "Windows",
+        // Logging
+        "Serilog", "NLog", "log4net",
+        // Testing
+        "Xunit", "NUnit", "MSTest", "FluentAssertions", "Shouldly", "Moq", "AutoFixture", "Bogus",
+        // Web / API
+        "Swashbuckle", "Grpc",
+        // Data
+        "Newtonsoft", "Dapper", "StackExchange",
+        // Messaging
+        "RabbitMQ", "MassTransit",
+        // Utilities
+        "AutoMapper", "FluentValidation", "MediatR", "Polly",
+        // Cloud
+        "Azure", "Amazon", "Google",
+    };
 }

@@ -49,4 +49,13 @@ tasks.withType<RdGenTask> {
     val classPath = sourceSets["main"].runtimeClasspath
     dependsOn(classPath)
     classpath(classPath)
+
+    // rider-model.jar is compiled with Java 21; ensure rdgen runs on JDK 21+
+    val riderJbr = listOf(
+        "C:/Program Files/JetBrains/JetBrains Rider 2025.3.0.1/jbr/bin/java.exe",
+        "C:/Program Files/JetBrains/JetBrains Rider 2025.3/jbr/bin/java.exe"
+    ).map(::File).firstOrNull(File::exists)
+    if (riderJbr != null) {
+        executable(riderJbr.absolutePath)
+    }
 }

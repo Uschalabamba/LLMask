@@ -6,12 +6,14 @@ build
 output
 .gradle
 .tmp
+/packages/
 
 # User-specific files
 *.suo
 *.user
 *.sln.docstates
 *.cache
+*.ini
 
 # IDEs
 /.idea/*.iml

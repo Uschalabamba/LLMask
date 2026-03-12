@@ -1,0 +1,18 @@
+Roadmap:
+
+Implement some settings options for the plugin so the user can toggle between the features they want or dont want. This will include (but is not limited to) toggles for the features described below:
+
+- Partial PSI-Walking - as described by you above and may replace the pure string analysis option (maybe statically via configuration or - if possible - dynamically based on some pre-processing logic)
+- Full PSI-Walking - only accessible via the right click actions on .cs files
+
+Approach-unspecific features like:
+
+- context action to add a token to the whitelist directly
+- Obfuscation "Themes" (for one class/file, obfuscate with related but basic terms (customer, order, productId, price) based on very basic semantics)
+- probably more QOL stuff to come
+
+
+
+
+
+current:
