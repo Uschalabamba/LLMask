@@ -165,22 +165,30 @@ public class StringBasedObfuscatorTests
     public void Obfuscate_WindowsPathString_BecomesPathPlaceholder()
         // Simulates the C# source token: "C:\\Users\\me\\file.txt"
         // (two literal backslashes per separator, as they appear in source)
-        => Assert.That(StringBasedObfuscator.Obfuscate(@"""C:\\Users\\me\\file.txt"""), Is.EqualTo("\"<path_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("""
+                                                       "C:\\Users\\me\\file.txt"
+                                                       """), Is.EqualTo("\"<path_1>\""));
 
     [Test]
     public void Obfuscate_DrivePrefixString_BecomesPathPlaceholder()
         // Simulates: "D:\data" (any string starting with X:)
-        => Assert.That(StringBasedObfuscator.Obfuscate(@"""D:\data"""), Is.EqualTo("\"<path_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("""
+                                                       "D:\data"
+                                                       """), Is.EqualTo("\"<path_1>\""));
 
     [Test]
     public void Obfuscate_VerbatimString_BecomesStrPlaceholder()
         // @"some text" — verbatim string, no path/url content
-        => Assert.That(StringBasedObfuscator.Obfuscate(@"@""some text"""), Is.EqualTo("\"<str_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("""
+                                                       @"some text"
+                                                       """), Is.EqualTo("\"<str_1>\""));
 
     [Test]
     public void Obfuscate_InterpolatedString_BecomesStrPlaceholder()
         // $"hello world" — interpolated, no path/url content
-        => Assert.That(StringBasedObfuscator.Obfuscate(@"$""hello world"""), Is.EqualTo("\"<str_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("""
+                                                       $"hello world"
+                                                       """), Is.EqualTo("\"<str_1>\""));
 
     [Test]
     public void Obfuscate_SameStringLiteral_MapsToSamePlaceholder()
@@ -280,18 +288,22 @@ public class StringBasedObfuscatorTests
     public void Obfuscate_FullMethod_StructureAndKeywordsPreservedIdentifiersObfuscated()
     {
         const string input =
-            @"public string GetCustomerName(int customerId)
-            {
-                var customer = _repository.GetById(customerId);
-                return customer.FullName;
-            }";
+            """
+            public string GetCustomerName(int customerId)
+                        {
+                            var customer = _repository.GetById(customerId);
+                            return customer.FullName;
+                        }
+            """;
 
         const string expected =
-            @"public string TypeName1(int localVar1)
-            {
-                var localVar2 = _field1.TypeName2(localVar1);
-                return localVar2.TypeName3;
-            }";
+            """
+            public string TypeName1(int localVar1)
+                        {
+                            var localVar2 = _field1.TypeName2(localVar1);
+                            return localVar2.TypeName3;
+                        }
+            """;
 
         Assert.That(StringBasedObfuscator.Obfuscate(input), Is.EqualTo(expected));
     }
@@ -300,20 +312,24 @@ public class StringBasedObfuscatorTests
     public void Obfuscate_MethodWithStringAndComment_AllThreeRulesApply()
     {
         const string input =
-            @"public void Connect()
-            {
-                // connect to the internal API
-                var url = ""https://internal.corp/api"";
-                _client.Open(url);
-            }";
+            """
+            public void Connect()
+                        {
+                            // connect to the internal API
+                            var url = "https://internal.corp/api";
+                            _client.Open(url);
+                        }
+            """;
 
         const string expected =
-            @"public void TypeName1()
-            {
-                // <comment>
-                var localVar1 = ""<url_1>"";
-                _field1.TypeName2(localVar1);
-            }";
+            """
+            public void TypeName1()
+                        {
+                            // <comment>
+                            var localVar1 = "<url_1>";
+                            _field1.TypeName2(localVar1);
+                        }
+            """;
 
         Assert.That(StringBasedObfuscator.Obfuscate(input), Is.EqualTo(expected));
     }

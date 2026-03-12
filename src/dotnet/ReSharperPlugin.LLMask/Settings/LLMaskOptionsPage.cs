@@ -13,7 +13,7 @@ namespace ReSharperPlugin.LLMask.Settings;
     ParentId = EnvironmentPage.Pid)]
 public class LLMaskOptionsPage : BeSimpleOptionsPage
 {
-    public const string PageId = "LLMask";
+    private const string PageId = "LLMask";
 
     public LLMaskOptionsPage(
         Lifetime lifetime,

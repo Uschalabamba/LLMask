@@ -22,7 +22,7 @@ namespace ReSharperPlugin.LLMask;
     Priority = 1)]
 public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider provider) : ContextActionBase
 {
-    private static readonly ILog Log = JetBrains.Diagnostics.Log.GetLog<ObfuscateAndCopyContextAction>();
+    private static readonly ILog log = Log.GetLog<ObfuscateAndCopyContextAction>();
 
     public override string Text => "LLMask: Obfuscate and copy to clipboard";
 
@@ -35,8 +35,11 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
         var settings = solution.GetComponent<ISettingsStore>()
                                .BindToContextTransient(ContextRange.ApplicationWide)
                                .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
+        
         if (!settings.UseStringObfuscation)
+        {
             return null;
+        }
 
         var extraWords = string.IsNullOrWhiteSpace(settings.CustomWhitelist)
             ? null
@@ -53,11 +56,12 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
                 .Where(w => w.Length > 0);
 
         var selectionRange = provider.DocumentSelection;
+        
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);
             var obfuscated   = StringBasedObfuscator.Obfuscate(selectedText, extraWords, baseWords);
-            Log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, copied to clipboard");
+            log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, copied to clipboard");
             System.Windows.Clipboard.SetText(obfuscated);
         };
     }

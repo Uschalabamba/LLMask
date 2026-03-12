@@ -12,11 +12,11 @@ using NUnit.Framework;
 namespace ReSharperPlugin.LLMask.Tests
 {
     [ZoneDefinition]
-    public class LLMaskTestEnvironmentZone : ITestsEnvZone, IRequire<PsiFeatureTestZone>, IRequire<ILLMaskZone> { }
+    public class LLMaskTestEnvironmentZone : ITestsEnvZone, IRequire<PsiFeatureTestZone>, IRequire<ILLMaskZone>;
 
     [ZoneMarker]
-    public class ZoneMarker : IRequire<ICodeEditingZone>, IRequire<ILanguageCSharpZone>, IRequire<LLMaskTestEnvironmentZone> { }
+    public class ZoneMarker : IRequire<ICodeEditingZone>, IRequire<ILanguageCSharpZone>, IRequire<LLMaskTestEnvironmentZone>;
 
     [SetUpFixture]
-    public class LLMaskTestsAssembly : ExtensionTestEnvironmentAssembly<LLMaskTestEnvironmentZone> { }
+    public class LLMaskTestsAssembly : ExtensionTestEnvironmentAssembly<LLMaskTestEnvironmentZone>;
 }
