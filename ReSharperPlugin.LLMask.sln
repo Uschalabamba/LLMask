@@ -14,6 +14,7 @@ ProjectSection(SolutionItems) = preProject
 	src\rider\main\resources\META-INF\plugin.xml = src\rider\main\resources\META-INF\plugin.xml
 	build.gradle.kts = build.gradle.kts
 	gradle.properties = gradle.properties
+	.editorconfig = .editorconfig
 EndProjectSection
 EndProject
 Global

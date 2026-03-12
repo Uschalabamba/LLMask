@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -28,22 +29,22 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 /// </summary>
 public static class StringBasedObfuscator
 {
-    private static readonly HashSet<string> PreservedWords =
+    private static readonly HashSet<string> preservedWords =
         new(CSharpIdentifierData.DefaultBaseWhitelist.Split(','), StringComparer.Ordinal);
 
-    private static readonly Regex Tokenizer = new Regex(
+    private static readonly Regex tokenizer = new (
         // 1. Block comment (may span lines)
         @"(?<BlockComment>/\*[\s\S]*?\*/)" +
         // 2. Line / doc comment
         @"|(?<LineComment>//[^\r\n]*)" +
         // 3. Verbatim interpolated string  ($@ or @$ prefix)
-        @"|(?<VerbatimInterpString>(?:\$@|@\$)""(?:[^""]|"""")*"")" +
+        """|(?<VerbatimInterpString>(?:\$@|@\$)"(?:[^"]|"")*")""" +
         // 4. Interpolated string
-        @"|(?<InterpString>\$""(?:[^""\\]|\\.)*"")" +
+        """|(?<InterpString>\$"(?:[^"\\]|\\.)*")""" +
         // 5. Verbatim string
-        @"|(?<VerbatimString>@""(?:[^""]|"""")*"")" +
+        """|(?<VerbatimString>@"(?:[^"]|"")*")""" +
         // 6. Regular string
-        @"|(?<RegularString>""(?:[^""\\]|\\.)*"")" +
+        """|(?<RegularString>"(?:[^"\\]|\\.)*")""" +
         // 7. Char literal (kept verbatim – single chars are not proprietary)
         @"|(?<CharLiteral>'(?:[^'\\]|\\.)*')" +
         // 8. Identifier or keyword
@@ -60,7 +61,7 @@ public static class StringBasedObfuscator
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
-            : PreservedWords;
+            : preservedWords;
 
         HashSet<string>? extra = null;
         if (extraPreservedWords != null)
@@ -79,7 +80,7 @@ public static class StringBasedObfuscator
 
         var sb = new StringBuilder(code.Length);
 
-        foreach (Match m in Tokenizer.Matches(code))
+        foreach (Match m in tokenizer.Matches(code))
         {
             var raw = m.Value;
 
@@ -138,12 +139,21 @@ public static class StringBasedObfuscator
     private static string MakeIdentifierPlaceholder(string id, int[] counters)
     {
         if (id.Length > 1 && id[0] == '_')
-            return "_field"   + (++counters[2]);
+        {
+            return "_field"   + ++counters[2];
+        }
+
         if (IsAllUpperCase(id))
-            return "CONST_"   + (++counters[3]);
+        {
+            return "CONST_"   + ++counters[3];
+        }
+
         if (char.IsUpper(id[0]))
-            return "TypeName" + (++counters[0]);
-        return "localVar"     + (++counters[1]);
+        {
+            return "TypeName" + ++counters[0];
+        }
+
+        return "localVar"     + ++counters[1];
     }
 
     private static bool IsAllUpperCase(string s)
