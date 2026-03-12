@@ -20,9 +20,9 @@ namespace ReSharperPlugin.LLMask;
     GroupType = typeof(CSharpContextActions),
     Disabled = false,
     Priority = 1)]
-public class HelloWorldContextAction(ICSharpContextActionDataProvider provider) : ContextActionBase
+public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider provider) : ContextActionBase
 {
-    private static readonly ILog Log = JetBrains.Diagnostics.Log.GetLog<HelloWorldContextAction>();
+    private static readonly ILog Log = JetBrains.Diagnostics.Log.GetLog<ObfuscateAndCopyContextAction>();
 
     public override string Text => "LLMask: Obfuscate and copy to clipboard";
 
@@ -56,7 +56,7 @@ public class HelloWorldContextAction(ICSharpContextActionDataProvider provider) 
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);
-            var obfuscated   = CodeObfuscator.Obfuscate(selectedText, extraWords, baseWords);
+            var obfuscated   = StringBasedObfuscator.Obfuscate(selectedText, extraWords, baseWords);
             Log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, copied to clipboard");
             System.Windows.Clipboard.SetText(obfuscated);
         };

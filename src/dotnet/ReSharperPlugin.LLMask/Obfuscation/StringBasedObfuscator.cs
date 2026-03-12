@@ -26,7 +26,7 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 ///   - Char literals are kept verbatim (single characters are not proprietary).
 ///   - Numbers, operators, and whitespace are kept verbatim.
 /// </summary>
-public static class CodeObfuscator
+public static class StringBasedObfuscator
 {
     private static readonly HashSet<string> PreservedWords =
         new(CSharpIdentifierData.DefaultBaseWhitelist.Split(','), StringComparer.Ordinal);
