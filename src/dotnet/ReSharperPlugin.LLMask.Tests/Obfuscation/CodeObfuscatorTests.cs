@@ -317,4 +317,91 @@ public class CodeObfuscatorTests
 
         Assert.That(CodeObfuscator.Obfuscate(input), Is.EqualTo(expected));
     }
+
+    // -----------------------------------------------------------------------
+    // Extra preserved words (CustomWhitelist)
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void Obfuscate_ExtraWord_IsObfuscatedWithoutCustomList()
+    {
+        // Baseline: without extra words, a proprietary identifier is replaced
+        var result = CodeObfuscator.Obfuscate("CustomerService");
+        Assert.That(result, Is.EqualTo("TypeName1"));
+    }
+
+    [Test]
+    public void Obfuscate_ExtraWord_IsPreservedWhenInCustomList()
+    {
+        var result = CodeObfuscator.Obfuscate("CustomerService", extraPreservedWords: ["CustomerService"]);
+        Assert.That(result, Is.EqualTo("CustomerService"));
+    }
+
+    [Test]
+    public void Obfuscate_MultipleExtraWords_AllPreserved()
+    {
+        var result = CodeObfuscator.Obfuscate(
+            "OrderService PaymentService",
+            extraPreservedWords: ["OrderService", "PaymentService"]);
+        Assert.That(result, Is.EqualTo("OrderService PaymentService"));
+    }
+
+    [Test]
+    public void Obfuscate_ExtraWords_DoNotAffectCountersForOtherIdentifiers()
+    {
+        // CustomerService is preserved; TypeName counter should start at 1 for ProductRepo
+        var result = CodeObfuscator.Obfuscate(
+            "CustomerService ProductRepo",
+            extraPreservedWords: ["CustomerService"]);
+        Assert.That(result, Is.EqualTo("CustomerService TypeName1"));
+    }
+
+    [Test]
+    public void Obfuscate_ExtraWordAlreadyInBaseList_IsStillPreserved()
+    {
+        // "List" is in the default base list; adding it to extra should not cause issues
+        var result = CodeObfuscator.Obfuscate("List", extraPreservedWords: ["List"]);
+        Assert.That(result, Is.EqualTo("List"));
+    }
+
+    [Test]
+    public void Obfuscate_EmptyExtraList_BehavesLikeDefault()
+    {
+        var withEmpty  = CodeObfuscator.Obfuscate("CustomerService", extraPreservedWords: []);
+        var withoutAny = CodeObfuscator.Obfuscate("CustomerService");
+        Assert.That(withEmpty, Is.EqualTo(withoutAny));
+    }
+
+    // -----------------------------------------------------------------------
+    // Custom base whitelist (BaseWhitelist)
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void Obfuscate_CustomBaseList_OnlyPreservesListedWords()
+    {
+        // With a minimal base list, even BCL types like "List" get obfuscated
+        var result = CodeObfuscator.Obfuscate(
+            "List CustomerService",
+            basePreservedWords: ["CustomerService"]);
+        Assert.That(result, Is.EqualTo("TypeName1 CustomerService"));
+    }
+
+    [Test]
+    public void Obfuscate_CustomBaseList_ReplacesDefaultKeywords()
+    {
+        // Passing a custom base list replaces the built-in list entirely,
+        // so C# keywords are no longer automatically preserved
+        var result = CodeObfuscator.Obfuscate(
+            "public void",
+            basePreservedWords: []);
+        Assert.That(result, Is.EqualTo("localVar1 localVar2"));
+    }
+
+    [Test]
+    public void Obfuscate_NullBaseList_FallsBackToDefaultPreservedWords()
+    {
+        // null → built-in PreservedWords; keywords must still pass through
+        var result = CodeObfuscator.Obfuscate("public void", basePreservedWords: null);
+        Assert.That(result, Is.EqualTo("public void"));
+    }
 }

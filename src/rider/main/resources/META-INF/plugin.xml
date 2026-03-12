@@ -12,6 +12,14 @@
 ]]>
   </description>
 
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationConfigurable
+        instance="com.jetbrains.rider.plugins.llmask.LLMaskOptionsPage"
+        id="LLMask"
+        displayName="LLMask"
+        parentId="tools"/>
+  </extensions>
+
   <actions>
     <action id="LLMask.HelloWorld"
             class="com.jetbrains.rider.plugins.llmask.HelloWorldAction"

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using JetBrains.Application.Progress;
 using JetBrains.Application.Settings;
 using JetBrains.Diagnostics;
@@ -37,11 +38,25 @@ public class HelloWorldContextAction(ICSharpContextActionDataProvider provider) 
         if (!settings.UseStringObfuscation)
             return null;
 
+        var extraWords = string.IsNullOrWhiteSpace(settings.CustomWhitelist)
+            ? null
+            : settings.CustomWhitelist
+                .Split(',')
+                .Select(w => w.Trim())
+                .Where(w => w.Length > 0);
+
+        var baseWords = string.IsNullOrWhiteSpace(settings.BaseWhitelist)
+            ? null
+            : settings.BaseWhitelist
+                .Split(',')
+                .Select(w => w.Trim())
+                .Where(w => w.Length > 0);
+
         var selectionRange = provider.DocumentSelection;
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);
-            var obfuscated   = CodeObfuscator.Obfuscate(selectedText);
+            var obfuscated   = CodeObfuscator.Obfuscate(selectedText, extraWords, baseWords);
             Log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, copied to clipboard");
             System.Windows.Clipboard.SetText(obfuscated);
         };
