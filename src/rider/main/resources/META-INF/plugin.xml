@@ -21,10 +21,10 @@
   </extensions>
 
   <actions>
-    <action id="LLMask.HelloWorld"
-            class="com.jetbrains.rider.plugins.llmask.HelloWorldAction"
-            text="Hello World (LLMask)">
-      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    <action id="LLMask.ObfuscateFile"
+            class="com.jetbrains.rider.plugins.llmask.ObfuscateFileAction"
+            text="LLMask: Obfuscate and copy to clipboard">
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
     </action>
   </actions>
 

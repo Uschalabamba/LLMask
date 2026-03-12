@@ -99,10 +99,7 @@ public static class StringBasedObfuscator
             {
                 if (!strMap.TryGetValue(raw, out var strPlaceholder))
                 {
-                    var content  = ExtractStringContent(raw);
-                    strPlaceholder  = IsUrl(content)      ? $"\"<url_{++strCounters[2]}>\""
-                        : IsFilePath(content) ? $"\"<path_{++strCounters[1]}>\""
-                        : $"\"<str_{++strCounters[0]}>\"";
+                    strPlaceholder = MakeStringPlaceholder(ExtractStringContent(raw), strCounters);
                     strMap[raw] = strPlaceholder;
                 }
                 sb.Append(strPlaceholder);
@@ -136,7 +133,7 @@ public static class StringBasedObfuscator
         return sb.ToString();
     }
 
-    private static string MakeIdentifierPlaceholder(string id, int[] counters)
+    internal static string MakeIdentifierPlaceholder(string id, int[] counters)
     {
         if (id.Length > 1 && id[0] == '_')
         {
@@ -156,7 +153,7 @@ public static class StringBasedObfuscator
         return "localVar"     + ++counters[1];
     }
 
-    private static bool IsAllUpperCase(string s)
+    internal static bool IsAllUpperCase(string s)
     {
         var hasLetter = false;
         foreach (var c in s)
@@ -177,7 +174,7 @@ public static class StringBasedObfuscator
     }
 
     /// <summary>Strips string prefix characters ($, @) and surrounding quotes.</summary>
-    private static string ExtractStringContent(string token)
+    internal static string ExtractStringContent(string token)
     {
         var i = 0;
         while (i < token.Length && (token[i] == '$' || token[i] == '@'))
@@ -199,10 +196,17 @@ public static class StringBasedObfuscator
         return i <= end ? token.Substring(i, end - i) : string.Empty;
     }
 
-    private static bool IsUrl(string s) =>
+    internal static bool IsUrl(string s) =>
         s.IndexOf("://", StringComparison.Ordinal) >= 0;
 
-    private static bool IsFilePath(string s) =>
+    internal static bool IsFilePath(string s) =>
         s.IndexOf('\\') >= 0 ||
         (s.Length >= 3 && char.IsLetter(s[0]) && s[1] == ':');
+
+    /// <summary>Creates a string placeholder based on content heuristics.</summary>
+    internal static string MakeStringPlaceholder(string content, int[] strCounters) =>
+        IsUrl(content)      ? $"\"url_{++strCounters[2]}\""
+        : IsFilePath(content) ? $"\"path_{++strCounters[1]}\""
+        : $"\"someString_{++strCounters[0]}\"";
+
 }

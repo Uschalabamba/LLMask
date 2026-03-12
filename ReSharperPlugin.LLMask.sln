@@ -15,6 +15,7 @@ ProjectSection(SolutionItems) = preProject
 	build.gradle.kts = build.gradle.kts
 	gradle.properties = gradle.properties
 	.editorconfig = .editorconfig
+	TODO.txt = TODO.txt
 EndProjectSection
 EndProject
 Global
