@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using ReSharperPlugin.LLMask.Data;
 
 namespace ReSharperPlugin.LLMask.Obfuscation;
 
@@ -25,72 +26,10 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 ///   - Char literals are kept verbatim (single characters are not proprietary).
 ///   - Numbers, operators, and whitespace are kept verbatim.
 /// </summary>
-public static class CodeObfuscator
+public static class StringBasedObfuscator
 {
     private static readonly HashSet<string> PreservedWords =
-        new(StringComparer.Ordinal)
-        {
-            // C# keywords
-            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
-            "checked", "class", "const", "continue", "decimal", "default", "delegate", "do",
-            "double", "else", "enum", "event", "explicit", "extern", "false", "finally",
-            "fixed", "float", "for", "foreach", "goto", "if", "implicit", "in", "int",
-            "interface", "internal", "is", "lock", "long", "namespace", "new", "null",
-            "object", "operator", "out", "override", "params", "private", "protected",
-            "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof",
-            "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true",
-            "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using",
-            "virtual", "void", "volatile", "while",
-
-            // Contextual keywords
-            "add", "alias", "ascending", "async", "await", "by", "descending", "dynamic",
-            "equals", "from", "get", "global", "group", "into", "join", "let", "nameof",
-            "notnull", "on", "orderby", "partial", "remove", "select", "set", "unmanaged",
-            "value", "var", "when", "where", "with", "yield",
-
-            // Preprocessor identifiers (appear as plain identifiers after '#')
-            "define", "elif", "endif", "endregion", "error", "line", "nullable",
-            "pragma", "region", "undef", "warning",
-
-            // Well-known BCL / framework types
-            "Action", "Activator", "AppDomain",
-            "ArgumentException", "ArgumentNullException", "ArgumentOutOfRangeException",
-            "Array", "ArrayList", "Attribute",
-            "Boolean", "Byte",
-            "CancellationToken", "CancellationTokenSource", "Char",
-            "Console", "Convert",
-            "DateTime", "DateTimeOffset", "Decimal", "Dictionary",
-            "Double",
-            "Enum", "Environment", "EventArgs", "EventHandler", "Exception",
-            "Func",
-            "Guid",
-            "HashSet",
-            "ICollection", "IComparable", "IDisposable",
-            "IEnumerable", "IEnumerator", "IEquatable",
-            "IList", "IReadOnlyCollection", "IReadOnlyDictionary", "IReadOnlyList",
-            "Int16", "Int32", "Int64", "IntPtr",
-            "InvalidOperationException",
-            "KeyValuePair",
-            "Lazy", "LinkedList", "List",
-            "Math", "MemoryStream", "Monitor", "Mutex",
-            "NotImplementedException", "NotSupportedException",
-            "Nullable",
-            "Object", "ObjectDisposedException",
-            "OperationCanceledException", "OutOfMemoryException",
-            "Parallel", "Path", "Queue",
-            "Random", "Regex",
-            "SByte", "Semaphore", "SemaphoreSlim", "Single",
-            "SortedDictionary", "SortedList", "Stack", "StackOverflowException",
-            "Stream", "StreamReader", "StreamWriter", "String", "StringBuilder",
-            "Task", "Thread", "ThreadPool", "TimeSpan", "Timer", "Tuple",
-            "Type",
-            "UInt16", "UInt32", "UInt64", "UIntPtr", "Uri",
-            "ValueTask", "ValueTuple", "Version",
-            "WeakReference",
-
-            // Common attribute names used without the 'Attribute' suffix
-            "Flags", "NonSerialized", "Obsolete", "Serializable", "ThreadStatic",
-        };
+        new(CSharpIdentifierData.DefaultBaseWhitelist.Split(','), StringComparer.Ordinal);
 
     private static readonly Regex Tokenizer = new Regex(
         // 1. Block comment (may span lines)
@@ -114,8 +53,22 @@ public static class CodeObfuscator
         RegexOptions.Compiled
     );
 
-    public static string Obfuscate(string code)
+    public static string Obfuscate(
+        string code,
+        IEnumerable<string>? extraPreservedWords = null,
+        IEnumerable<string>? basePreservedWords = null)
     {
+        var baseWords = basePreservedWords != null
+            ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
+            : PreservedWords;
+
+        HashSet<string>? extra = null;
+        if (extraPreservedWords != null)
+        {
+            extra = new HashSet<string>(extraPreservedWords, StringComparer.Ordinal);
+            extra.ExceptWith(baseWords); // skip words already in the base list
+        }
+
         // id:  [0] TypeName  [1] localVar  [2] _field  [3] CONST_
         var idCounters  = new int[4];
         // str: [0] str      [1] path       [2] url
@@ -159,7 +112,7 @@ public static class CodeObfuscator
             }
             else if (m.Groups["Identifier"].Success)
             {
-                if (PreservedWords.Contains(raw))
+                if (baseWords.Contains(raw) || (extra != null && extra.Contains(raw)))
                 {
                     sb.Append(raw);
                 }

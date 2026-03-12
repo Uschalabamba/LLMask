@@ -12,7 +12,7 @@ class HelloWorldAction : AnAction() {
         log.info("LLMask HelloWorldAction executed from Kotlin")
         Messages.showInputDialog(
             e.project,
-            "Response from C# backend:",
+            "Response from Kotlin frontend:",
             "LLMask",
             Messages.getInformationIcon(),
             "Hello World",

@@ -4,7 +4,7 @@ using ReSharperPlugin.LLMask.Obfuscation;
 namespace ReSharperPlugin.LLMask.Tests.Obfuscation;
 
 [TestFixture]
-public class CodeObfuscatorTests
+public class StringBasedObfuscatorTests
 {
     // -----------------------------------------------------------------------
     // Preservation — keywords and BCL types must pass through unchanged
@@ -45,7 +45,7 @@ public class CodeObfuscatorTests
     [TestCase("get")]
     [TestCase("set")]
     public void Obfuscate_CSharpKeyword_IsPreserved(string keyword)
-        => Assert.That(CodeObfuscator.Obfuscate(keyword), Is.EqualTo(keyword));
+        => Assert.That(StringBasedObfuscator.Obfuscate(keyword), Is.EqualTo(keyword));
 
     [TestCase("List")]
     [TestCase("Dictionary")]
@@ -70,7 +70,7 @@ public class CodeObfuscatorTests
     [TestCase("Int32")]
     [TestCase("Boolean")]
     public void Obfuscate_BclType_IsPreserved(string type)
-        => Assert.That(CodeObfuscator.Obfuscate(type), Is.EqualTo(type));
+        => Assert.That(StringBasedObfuscator.Obfuscate(type), Is.EqualTo(type));
 
     // -----------------------------------------------------------------------
     // Identifier categorisation — naming convention drives placeholder prefix
@@ -78,25 +78,25 @@ public class CodeObfuscatorTests
 
     [Test]
     public void Obfuscate_PascalCase_ProducesTypeName()
-        => Assert.That(CodeObfuscator.Obfuscate("CustomerService"), Is.EqualTo("TypeName1"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("CustomerService"), Is.EqualTo("TypeName1"));
 
     [Test]
     public void Obfuscate_CamelCase_ProducesLocalVar()
-        => Assert.That(CodeObfuscator.Obfuscate("customerId"), Is.EqualTo("localVar1"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("customerId"), Is.EqualTo("localVar1"));
 
     [Test]
     public void Obfuscate_UnderscorePrefix_ProducesField()
-        => Assert.That(CodeObfuscator.Obfuscate("_repository"), Is.EqualTo("_field1"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("_repository"), Is.EqualTo("_field1"));
 
     [Test]
     public void Obfuscate_AllUpperCase_ProducesConst()
-        => Assert.That(CodeObfuscator.Obfuscate("MAX_RETRY_COUNT"), Is.EqualTo("CONST_1"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("MAX_RETRY_COUNT"), Is.EqualTo("CONST_1"));
 
     [Test]
     public void Obfuscate_SingleUnderscoreAlone_IsNotTreatedAsField()
     {
         // '_' on its own is the C# discard — length 1, so the _field check is skipped
-        var result = CodeObfuscator.Obfuscate("_ = Foo()");
+        var result = StringBasedObfuscator.Obfuscate("_ = Foo()");
         Assert.That(result, Does.StartWith("localVar1"));
     }
 
@@ -104,21 +104,21 @@ public class CodeObfuscatorTests
     public void Obfuscate_EachCategory_UsesItsOwnCounter()
     {
         // TypeName, localVar, and _field counters are independent
-        var result = CodeObfuscator.Obfuscate("Foo foo _foo");
+        var result = StringBasedObfuscator.Obfuscate("Foo foo _foo");
         Assert.That(result, Is.EqualTo("TypeName1 localVar1 _field1"));
     }
 
     [Test]
     public void Obfuscate_MultiplePascalCaseIdentifiers_CountsUp()
     {
-        var result = CodeObfuscator.Obfuscate("Alpha Bravo Charlie");
+        var result = StringBasedObfuscator.Obfuscate("Alpha Bravo Charlie");
         Assert.That(result, Is.EqualTo("TypeName1 TypeName2 TypeName3"));
     }
 
     [Test]
     public void Obfuscate_MultipleCamelCaseIdentifiers_CountsUp()
     {
-        var result = CodeObfuscator.Obfuscate("alpha bravo charlie");
+        var result = StringBasedObfuscator.Obfuscate("alpha bravo charlie");
         Assert.That(result, Is.EqualTo("localVar1 localVar2 localVar3"));
     }
 
@@ -131,21 +131,21 @@ public class CodeObfuscatorTests
     public void Obfuscate_RepeatedPascalIdentifier_GetsSamePlaceholder()
     {
         // Foo appears at positions 0 and 2; both must map to TypeName1
-        var result = CodeObfuscator.Obfuscate("Foo.Bar(Foo.Baz)");
+        var result = StringBasedObfuscator.Obfuscate("Foo.Bar(Foo.Baz)");
         Assert.That(result, Is.EqualTo("TypeName1.TypeName2(TypeName1.TypeName3)"));
     }
 
     [Test]
     public void Obfuscate_RepeatedCamelIdentifier_GetsSamePlaceholder()
     {
-        var result = CodeObfuscator.Obfuscate("foo + foo");
+        var result = StringBasedObfuscator.Obfuscate("foo + foo");
         Assert.That(result, Is.EqualTo("localVar1 + localVar1"));
     }
 
     [Test]
     public void Obfuscate_SameIdentifierAcrossMultipleExpressions_GetsSamePlaceholder()
     {
-        var result = CodeObfuscator.Obfuscate("Widget.Create(widget, widgetId)");
+        var result = StringBasedObfuscator.Obfuscate("Widget.Create(widget, widgetId)");
         Assert.That(result, Is.EqualTo("TypeName1.TypeName2(localVar1, localVar2)"));
     }
 
@@ -155,51 +155,51 @@ public class CodeObfuscatorTests
 
     [Test]
     public void Obfuscate_PlainString_BecomesStrPlaceholder()
-        => Assert.That(CodeObfuscator.Obfuscate("\"hello world\""), Is.EqualTo("\"<str_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("\"hello world\""), Is.EqualTo("\"<str_1>\""));
 
     [Test]
     public void Obfuscate_UrlString_BecomesUrlPlaceholder()
-        => Assert.That(CodeObfuscator.Obfuscate("\"https://example.com/api\""), Is.EqualTo("\"<url_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("\"https://example.com/api\""), Is.EqualTo("\"<url_1>\""));
 
     [Test]
     public void Obfuscate_WindowsPathString_BecomesPathPlaceholder()
         // Simulates the C# source token: "C:\\Users\\me\\file.txt"
         // (two literal backslashes per separator, as they appear in source)
-        => Assert.That(CodeObfuscator.Obfuscate(@"""C:\\Users\\me\\file.txt"""), Is.EqualTo("\"<path_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate(@"""C:\\Users\\me\\file.txt"""), Is.EqualTo("\"<path_1>\""));
 
     [Test]
     public void Obfuscate_DrivePrefixString_BecomesPathPlaceholder()
         // Simulates: "D:\data" (any string starting with X:)
-        => Assert.That(CodeObfuscator.Obfuscate(@"""D:\data"""), Is.EqualTo("\"<path_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate(@"""D:\data"""), Is.EqualTo("\"<path_1>\""));
 
     [Test]
     public void Obfuscate_VerbatimString_BecomesStrPlaceholder()
         // @"some text" — verbatim string, no path/url content
-        => Assert.That(CodeObfuscator.Obfuscate(@"@""some text"""), Is.EqualTo("\"<str_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate(@"@""some text"""), Is.EqualTo("\"<str_1>\""));
 
     [Test]
     public void Obfuscate_InterpolatedString_BecomesStrPlaceholder()
         // $"hello world" — interpolated, no path/url content
-        => Assert.That(CodeObfuscator.Obfuscate(@"$""hello world"""), Is.EqualTo("\"<str_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate(@"$""hello world"""), Is.EqualTo("\"<str_1>\""));
 
     [Test]
     public void Obfuscate_SameStringLiteral_MapsToSamePlaceholder()
     {
-        var result = CodeObfuscator.Obfuscate("\"hello\" + \"hello\"");
+        var result = StringBasedObfuscator.Obfuscate("\"hello\" + \"hello\"");
         Assert.That(result, Is.EqualTo("\"<str_1>\" + \"<str_1>\""));
     }
 
     [Test]
     public void Obfuscate_DifferentStringLiterals_GetDistinctPlaceholders()
     {
-        var result = CodeObfuscator.Obfuscate("\"alpha\" + \"beta\"");
+        var result = StringBasedObfuscator.Obfuscate("\"alpha\" + \"beta\"");
         Assert.That(result, Is.EqualTo("\"<str_1>\" + \"<str_2>\""));
     }
 
     [Test]
     public void Obfuscate_UrlAndPathInSameSnippet_UseDistinctCategories()
     {
-        var result = CodeObfuscator.Obfuscate("\"https://api.example.com\" + \"C:\\\\logs\\\\app.log\"");
+        var result = StringBasedObfuscator.Obfuscate("\"https://api.example.com\" + \"C:\\\\logs\\\\app.log\"");
         Assert.That(result, Is.EqualTo("\"<url_1>\" + \"<path_1>\""));
     }
 
@@ -209,21 +209,21 @@ public class CodeObfuscatorTests
 
     [Test]
     public void Obfuscate_LineComment_IsRedacted()
-        => Assert.That(CodeObfuscator.Obfuscate("// proprietary detail"), Is.EqualTo("// <comment>"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("// proprietary detail"), Is.EqualTo("// <comment>"));
 
     [Test]
     public void Obfuscate_DocComment_IsRedacted()
-        => Assert.That(CodeObfuscator.Obfuscate("/// <summary>internal</summary>"), Is.EqualTo("// <comment>"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("/// <summary>internal</summary>"), Is.EqualTo("// <comment>"));
 
     [Test]
     public void Obfuscate_BlockComment_IsRedacted()
-        => Assert.That(CodeObfuscator.Obfuscate("/* line1\nline2 */"), Is.EqualTo("/* <comment> */"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("/* line1\nline2 */"), Is.EqualTo("/* <comment> */"));
 
     [Test]
     public void Obfuscate_CodeAfterLineComment_IsStillObfuscated()
     {
         // The comment should not "swallow" the identifier on the next line
-        var result = CodeObfuscator.Obfuscate("// comment\nMyClass obj");
+        var result = StringBasedObfuscator.Obfuscate("// comment\nMyClass obj");
         Assert.That(result, Is.EqualTo("// <comment>\nTypeName1 localVar1"));
     }
 
@@ -238,7 +238,7 @@ public class CodeObfuscatorTests
     [TestCase("'\\t'")]
     [TestCase("'\\''")]
     public void Obfuscate_CharLiteral_IsPreserved(string charLiteral)
-        => Assert.That(CodeObfuscator.Obfuscate(charLiteral), Is.EqualTo(charLiteral));
+        => Assert.That(StringBasedObfuscator.Obfuscate(charLiteral), Is.EqualTo(charLiteral));
 
     // -----------------------------------------------------------------------
     // Structural tokens — numbers, operators, whitespace, punctuation
@@ -246,31 +246,31 @@ public class CodeObfuscatorTests
 
     [Test]
     public void Obfuscate_IntegerLiteral_IsPreserved()
-        => Assert.That(CodeObfuscator.Obfuscate("42"), Is.EqualTo("42"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("42"), Is.EqualTo("42"));
 
     [Test]
     public void Obfuscate_FloatLiteral_IsPreserved()
-        => Assert.That(CodeObfuscator.Obfuscate("3.14"), Is.EqualTo("3.14"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("3.14"), Is.EqualTo("3.14"));
 
     [Test]
     public void Obfuscate_Punctuation_IsPreserved()
-        => Assert.That(CodeObfuscator.Obfuscate("{ }"), Is.EqualTo("{ }"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("{ }"), Is.EqualTo("{ }"));
 
     [Test]
     public void Obfuscate_ArithmeticOperators_ArePreserved()
     {
         // Only operators survive; the single-letter identifiers get obfuscated
-        var result = CodeObfuscator.Obfuscate("a + b");
+        var result = StringBasedObfuscator.Obfuscate("a + b");
         Assert.That(result, Is.EqualTo("localVar1 + localVar2"));
     }
 
     [Test]
     public void Obfuscate_Semicolons_ArePreserved()
-        => Assert.That(CodeObfuscator.Obfuscate("return;"), Is.EqualTo("return;"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("return;"), Is.EqualTo("return;"));
 
     [Test]
     public void Obfuscate_MemberAccessDot_IsPreserved()
-        => Assert.That(CodeObfuscator.Obfuscate("a.b"), Is.EqualTo("localVar1.localVar2"));
+        => Assert.That(StringBasedObfuscator.Obfuscate("a.b"), Is.EqualTo("localVar1.localVar2"));
 
     // -----------------------------------------------------------------------
     // Integration — a realistic method body
@@ -293,7 +293,7 @@ public class CodeObfuscatorTests
                 return localVar2.TypeName3;
             }";
 
-        Assert.That(CodeObfuscator.Obfuscate(input), Is.EqualTo(expected));
+        Assert.That(StringBasedObfuscator.Obfuscate(input), Is.EqualTo(expected));
     }
 
     [Test]
@@ -315,6 +315,93 @@ public class CodeObfuscatorTests
                 _field1.TypeName2(localVar1);
             }";
 
-        Assert.That(CodeObfuscator.Obfuscate(input), Is.EqualTo(expected));
+        Assert.That(StringBasedObfuscator.Obfuscate(input), Is.EqualTo(expected));
+    }
+
+    // -----------------------------------------------------------------------
+    // Extra preserved words (CustomWhitelist)
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void Obfuscate_ExtraWord_IsObfuscatedWithoutCustomList()
+    {
+        // Baseline: without extra words, a proprietary identifier is replaced
+        var result = StringBasedObfuscator.Obfuscate("CustomerService");
+        Assert.That(result, Is.EqualTo("TypeName1"));
+    }
+
+    [Test]
+    public void Obfuscate_ExtraWord_IsPreservedWhenInCustomList()
+    {
+        var result = StringBasedObfuscator.Obfuscate("CustomerService", extraPreservedWords: ["CustomerService"]);
+        Assert.That(result, Is.EqualTo("CustomerService"));
+    }
+
+    [Test]
+    public void Obfuscate_MultipleExtraWords_AllPreserved()
+    {
+        var result = StringBasedObfuscator.Obfuscate(
+            "OrderService PaymentService",
+            extraPreservedWords: ["OrderService", "PaymentService"]);
+        Assert.That(result, Is.EqualTo("OrderService PaymentService"));
+    }
+
+    [Test]
+    public void Obfuscate_ExtraWords_DoNotAffectCountersForOtherIdentifiers()
+    {
+        // CustomerService is preserved; TypeName counter should start at 1 for ProductRepo
+        var result = StringBasedObfuscator.Obfuscate(
+            "CustomerService ProductRepo",
+            extraPreservedWords: ["CustomerService"]);
+        Assert.That(result, Is.EqualTo("CustomerService TypeName1"));
+    }
+
+    [Test]
+    public void Obfuscate_ExtraWordAlreadyInBaseList_IsStillPreserved()
+    {
+        // "List" is in the default base list; adding it to extra should not cause issues
+        var result = StringBasedObfuscator.Obfuscate("List", extraPreservedWords: ["List"]);
+        Assert.That(result, Is.EqualTo("List"));
+    }
+
+    [Test]
+    public void Obfuscate_EmptyExtraList_BehavesLikeDefault()
+    {
+        var withEmpty  = StringBasedObfuscator.Obfuscate("CustomerService", extraPreservedWords: []);
+        var withoutAny = StringBasedObfuscator.Obfuscate("CustomerService");
+        Assert.That(withEmpty, Is.EqualTo(withoutAny));
+    }
+
+    // -----------------------------------------------------------------------
+    // Custom base whitelist (BaseWhitelist)
+    // -----------------------------------------------------------------------
+
+    [Test]
+    public void Obfuscate_CustomBaseList_OnlyPreservesListedWords()
+    {
+        // With a minimal base list, even BCL types like "List" get obfuscated
+        var result = StringBasedObfuscator.Obfuscate(
+            "List CustomerService",
+            basePreservedWords: ["CustomerService"]);
+        Assert.That(result, Is.EqualTo("TypeName1 CustomerService"));
+    }
+
+    [Test]
+    public void Obfuscate_CustomBaseList_ReplacesDefaultKeywords()
+    {
+        // Passing a custom base list replaces the built-in list entirely,
+        // so C# keywords are no longer automatically preserved
+        var result = StringBasedObfuscator.Obfuscate(
+            "public void",
+            basePreservedWords: []);
+        Assert.That(result, Is.EqualTo("localVar1 localVar2"));
+    }
+
+    [Test]
+    public void Obfuscate_NullBaseList_FallsBackToDefaultPreservedWords()
+    {
+        // null → built-in PreservedWords; keywords must still pass through
+        var result = StringBasedObfuscator.Obfuscate("public void", basePreservedWords: null);
+        Assert.That(result, Is.EqualTo("public void"));
     }
 }
