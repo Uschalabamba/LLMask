@@ -77,24 +77,70 @@ public static class PsiBasedObfuscator
                 continue;
             }
 
+            // Single-character generic locals (e.g. int a = …) don't leak proprietary
+            // information and just create noise.  Skip them so they pass through
+            // verbatim in Pass 2.  Semantic prefixes (idx, elem) are still registered
+            // even for single-char names so the LLM gets meaningful context.
+            if (name.Length == 1 && prefix == "localVar")
+            {
+                continue;
+            }
+
             counters.TryGetValue(prefix, out var n);
             idMap[name]    = $"{prefix}{n + 1}";
             counters[prefix] = n + 1;
         }
 
+        // ── Pre-pass: build directive replacements without touching composite node text ──
+        // Calling GetText() on a composite IUsingDirective node can trigger internal
+        // declared-element resolution for resolvable namespaces (System, Microsoft, …),
+        // which conflicts with concurrent code completion and causes "declaredElement
+        // should be valid" exceptions. Using only ITokenNode.GetText() (leaf nodes that
+        // return raw characters) is safe.
+        var directiveReplacements = new Dictionary<IUsingDirective, string>();
+        foreach (var directive in file.Descendants<IUsingDirective>())
+        {
+            string replacement;
+            if (IsWellKnownUsing(directive))
+            {
+                var buf = new StringBuilder();
+                foreach (var t in directive.Descendants<ITokenNode>())
+                    buf.Append(t.GetText());
+                replacement = buf.ToString().TrimEnd();
+            }
+            else
+            {
+                replacement = "using SomeNamespace;";
+            }
+            directiveReplacements[directive] = replacement;
+        }
+
         // ── Pass 2: walk tokens and build output ─────────────────────────────
+        var emittedUsings = new HashSet<IUsingDirective>();
         foreach (var token in file.Descendants<ITokenNode>())
         {
+            // Collapse each using directive to a single placeholder line.
+            var containingUsing = GetContainingUsingDirective(token);
+            if (containingUsing != null)
+            {
+                if (emittedUsings.Add(containingUsing))
+                {
+                    sb.Append(directiveReplacements.TryGetValue(containingUsing, out var rep)
+                        ? rep
+                        : "using SomeNamespace;");
+                }
+
+                continue;
+            }
+
             var tokenType = token.GetTokenType();
             var raw = token.GetText();
 
-            if (tokenType == CSharpTokenType.END_OF_LINE_COMMENT)
+            if (tokenType == CSharpTokenType.END_OF_LINE_COMMENT ||
+                tokenType == CSharpTokenType.C_STYLE_COMMENT)
             {
-                sb.Append("// <comment>");
-            }
-            else if (tokenType == CSharpTokenType.C_STYLE_COMMENT)
-            {
-                sb.Append("/* <comment> */");
+                // Drop comments entirely — they add noise without leaking proprietary
+                // information. Covers //, /// XML-doc, and /* */ block comments.
             }
             else if (IsStringLiteralToken(tokenType))
             {
@@ -118,7 +164,16 @@ public static class PsiBasedObfuscator
                 }
                 else if (idMap.TryGetValue(raw, out var placeholder))
                 {
+                    // Registered names include semantic labels:
+                    //   idx   – for-loop counters        elem – foreach elements
+                    //   param – lambda / method params   and all other declared symbols.
                     sb.Append(placeholder);
+                }
+                else if (raw.Length == 1)
+                {
+                    // Unregistered single-character identifiers (ad-hoc locals,
+                    // external single-char type refs) carry no proprietary information.
+                    sb.Append(raw);
                 }
                 else
                 {
@@ -157,8 +212,21 @@ public static class PsiBasedObfuscator
         IPropertyDeclaration or IIndexerDeclaration             => "MyProperty",
         IFieldDeclaration                                       => "_myField",
         IEventDeclaration                                       => "MyEvent",
+        // Lambda parameters (x => …) are semantically "the current element" just
+        // like a foreach iteration variable, so they share the "element" prefix.
+        // Regular method/constructor parameters keep the "param" label.
+        // IParameterDeclaration is the same PSI type for both; the when-guard
+        // distinguishes them by checking for an enclosing ILambdaExpression.
+        IParameterDeclaration p when IsLambdaParameter(p)      => "element",
         IParameterDeclaration                                   => "param",
-        ILocalVariableDeclaration                               => "localVar",
+        // Local variables are routed through a helper that inspects the parent
+        // chain to assign a more descriptive prefix for loop/foreach contexts.
+        ILocalVariableDeclaration localVar                      => GetLocalVarPrefix(localVar),
+        // In modern C# (7+), a foreach iteration variable declared with 'var'
+        // is represented as ISingleVariableDesignation inside a
+        // DeclarationExpression, NOT as ILocalVariableDeclaration.
+        // We detect the foreach context by walking up to IForeachStatement.
+        ISingleVariableDesignation designation                  => GetDesignationPrefix(designation),
         IConstantDeclaration or IEnumMemberDeclaration          => "CONST_",
 
         // Constructor/destructor names equal the class name, which is already
@@ -167,6 +235,66 @@ public static class PsiBasedObfuscator
         // constraints is error-prone at the token level.
         _ => null,
     };
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="param"/> is a lambda parameter
+    /// (i.e. an <c>ILambdaExpression</c> appears in its parent chain before any
+    /// method or class boundary).
+    /// </summary>
+    private static bool IsLambdaParameter(IParameterDeclaration param)
+    {
+        for (var node = param.Parent; node != null; node = node.Parent)
+        {
+            if (node is ILambdaExpression) return true;
+            if (node is ICSharpFunctionDeclaration || node is IClassDeclaration) return false;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Returns a semantic prefix for a local variable based on its syntactic role:
+    /// <list type="bullet">
+    ///   <item><c>idx</c>  – declared in a <c>for</c>-loop initialiser</item>
+    ///   <item><c>elem</c> – declared in a <c>foreach</c> statement</item>
+    ///   <item><c>localVar</c> – any other local variable</item>
+    /// </list>
+    /// The walk stops at the nearest enclosing <c>IBlock</c> or function boundary
+    /// so that locals inside a loop body are not mislabelled as loop indices.
+    /// </summary>
+    private static string GetLocalVarPrefix(ILocalVariableDeclaration decl)
+    {
+        for (var node = decl.Parent; node != null; node = node.Parent)
+        {
+            // IForeachStatement must be checked before IForStatement because it is
+            // a subtype in the ReSharper PSI hierarchy — checking the more general
+            // type first would match foreach and wrongly return "index".
+            if (node is IForeachStatement) return "element";
+            if (node is IForStatement)     return "index";
+
+            // Stop at block / function boundaries so a variable declared
+            // *inside* a loop body is not treated as the loop counter.
+            if (node is IBlock || node is ICSharpFunctionDeclaration)
+            {
+                break;
+            }
+        }
+        return "localVar";
+    }
+
+    /// <summary>
+    /// Returns a semantic prefix for a <c>var</c>-pattern designation (C# 7+)
+    /// such as the iteration variable in <c>foreach (var item in ...)</c>.
+    /// Walks the parent chain to detect the foreach context.
+    /// </summary>
+    private static string GetDesignationPrefix(ISingleVariableDesignation designation)
+    {
+        for (var node = designation.Parent; node != null; node = node.Parent)
+        {
+            if (node is IForeachStatement) return "element";
+            if (node is IBlock || node is ICSharpFunctionDeclaration) break;
+        }
+        return "localVar";
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Heuristic for external identifiers
@@ -219,6 +347,64 @@ public static class PsiBasedObfuscator
             }
         }
         return false;
+    }
+
+    /// Returns true when the directive's root namespace segment is well-known
+    /// (e.g. System, Serilog, Xunit) and its text can be emitted verbatim.
+    /// Only plain namespace directives are checked; alias directives are always replaced.
+    private static bool IsWellKnownUsing(IUsingDirective directive)
+    {
+        // Alias directives (using Alias = Foo.Bar) are always replaced.
+        if (directive is IUsingAliasDirective)
+        {
+            return false;
+        }
+
+        // Walk the directive's leaf tokens to find the first IDENTIFIER — that is
+        // always the root namespace segment (e.g. "System", "Serilog").
+        // Keyword tokens (using, global, static) and punctuation are never IDENTIFIER
+        // type, so we skip them without needing to parse text at all.
+        // Critically, we never call GetText() on the composite IUsingDirective node,
+        // which can trigger internal declared-element resolution for resolvable
+        // namespaces and cause "declaredElement should be valid" exceptions in
+        // concurrent code-completion.
+        foreach (var token in directive.Descendants<ITokenNode>())
+        {
+            if (token.GetTokenType() != CSharpTokenType.IDENTIFIER)
+            {
+                continue;
+            }
+
+            var root = token.GetText();
+
+            // "global" and "static" can appear as contextual identifiers in some
+            // edge cases; skip them and take the next identifier instead.
+            if (root is "global" or "static")
+            {
+                continue;
+            }
+
+            return CSharpIdentifierData.WellKnownNamespaceRoots.Contains(root);
+        }
+
+        return false;
+    }
+
+    private static IUsingDirective? GetContainingUsingDirective(ITokenNode token)
+    {
+        for (var node = token.Parent; node != null; node = node.Parent)
+        {
+            if (node is IUsingDirective d)
+            {
+                return d;
+            }
+
+            if (node is ICSharpFile)
+            {
+                return null;
+            }
+        }
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

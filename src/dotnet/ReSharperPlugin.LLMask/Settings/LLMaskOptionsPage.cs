@@ -21,7 +21,10 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
         OptionsSettingsSmartContext smartContext)
         : base(lifetime, optionsPageContext, smartContext)
     {
-        AddHeader("String-Based Obfuscation");
+        AddHeader("PSI-Based Obfuscation (full file)");
+        AddBoolOption((LLMaskSettings s) => s.UsePsiObfuscation, "Enable PSI-based obfuscation (right-click a .cs file → LLMask: Obfuscate file)");
+
+        AddHeader("String-Based Obfuscation (selection)");
         AddBoolOption((LLMaskSettings s) => s.UseStringObfuscation, "Enable string-based obfuscation");
         AddStringOption((LLMaskSettings s) => s.CustomWhitelist, "Additional preserved identifiers (comma-separated)");
 

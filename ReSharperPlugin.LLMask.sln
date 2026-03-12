@@ -16,6 +16,7 @@ ProjectSection(SolutionItems) = preProject
 	gradle.properties = gradle.properties
 	.editorconfig = .editorconfig
 	TODO.txt = TODO.txt
+	.gitignore = .gitignore
 EndProjectSection
 EndProject
 Global

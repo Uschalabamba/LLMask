@@ -205,8 +205,8 @@ public static class StringBasedObfuscator
 
     /// <summary>Creates a string placeholder based on content heuristics.</summary>
     internal static string MakeStringPlaceholder(string content, int[] strCounters) =>
-        IsUrl(content)      ? $"\"url_{++strCounters[2]}\""
-        : IsFilePath(content) ? $"\"path_{++strCounters[1]}\""
-        : $"\"someString_{++strCounters[0]}\"";
+        IsUrl(content)      ? $"\"url{++strCounters[2]}\""
+        : IsFilePath(content) ? $"\"path{++strCounters[1]}\""
+        : $"\"someString{++strCounters[0]}\"";
 
 }

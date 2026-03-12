@@ -15,6 +15,9 @@ public class LLMaskSettings
     [SettingsEntry(true, "Obfuscate selected code using string-based analysis when triggering the context action")]
     public bool UseStringObfuscation;
 
+    [SettingsEntry(true, "Obfuscate an entire .cs file using PSI-based analysis when triggering the file action")]
+    public bool UsePsiObfuscation;
+
     [SettingsEntry("", "Comma-separated list of additional identifiers to preserve (not obfuscate)")]
     public string CustomWhitelist;
 

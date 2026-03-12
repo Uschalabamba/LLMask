@@ -155,11 +155,11 @@ public class StringBasedObfuscatorTests
 
     [Test]
     public void Obfuscate_PlainString_BecomesStrPlaceholder()
-        => Assert.That(StringBasedObfuscator.Obfuscate("\"hello world\""), Is.EqualTo("\"<str_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("\"hello world\""), Is.EqualTo("\"someString1\""));
 
     [Test]
     public void Obfuscate_UrlString_BecomesUrlPlaceholder()
-        => Assert.That(StringBasedObfuscator.Obfuscate("\"https://example.com/api\""), Is.EqualTo("\"<url_1>\""));
+        => Assert.That(StringBasedObfuscator.Obfuscate("\"https://example.com/api\""), Is.EqualTo("\"url1\""));
 
     [Test]
     public void Obfuscate_WindowsPathString_BecomesPathPlaceholder()
@@ -167,48 +167,48 @@ public class StringBasedObfuscatorTests
         // (two literal backslashes per separator, as they appear in source)
         => Assert.That(StringBasedObfuscator.Obfuscate("""
                                                        "C:\\Users\\me\\file.txt"
-                                                       """), Is.EqualTo("\"<path_1>\""));
+                                                       """), Is.EqualTo("\"path1\""));
 
     [Test]
     public void Obfuscate_DrivePrefixString_BecomesPathPlaceholder()
         // Simulates: "D:\data" (any string starting with X:)
         => Assert.That(StringBasedObfuscator.Obfuscate("""
                                                        "D:\data"
-                                                       """), Is.EqualTo("\"<path_1>\""));
+                                                       """), Is.EqualTo("\"path1\""));
 
     [Test]
     public void Obfuscate_VerbatimString_BecomesStrPlaceholder()
         // @"some text" — verbatim string, no path/url content
         => Assert.That(StringBasedObfuscator.Obfuscate("""
                                                        @"some text"
-                                                       """), Is.EqualTo("\"<str_1>\""));
+                                                       """), Is.EqualTo("\"someString1\""));
 
     [Test]
     public void Obfuscate_InterpolatedString_BecomesStrPlaceholder()
         // $"hello world" — interpolated, no path/url content
         => Assert.That(StringBasedObfuscator.Obfuscate("""
                                                        $"hello world"
-                                                       """), Is.EqualTo("\"<str_1>\""));
+                                                       """), Is.EqualTo("\"someString1\""));
 
     [Test]
     public void Obfuscate_SameStringLiteral_MapsToSamePlaceholder()
     {
         var result = StringBasedObfuscator.Obfuscate("\"hello\" + \"hello\"");
-        Assert.That(result, Is.EqualTo("\"<str_1>\" + \"<str_1>\""));
+        Assert.That(result, Is.EqualTo("\"someString1\" + \"someString1\""));
     }
 
     [Test]
     public void Obfuscate_DifferentStringLiterals_GetDistinctPlaceholders()
     {
         var result = StringBasedObfuscator.Obfuscate("\"alpha\" + \"beta\"");
-        Assert.That(result, Is.EqualTo("\"<str_1>\" + \"<str_2>\""));
+        Assert.That(result, Is.EqualTo("\"someString1\" + \"someString2\""));
     }
 
     [Test]
     public void Obfuscate_UrlAndPathInSameSnippet_UseDistinctCategories()
     {
         var result = StringBasedObfuscator.Obfuscate("\"https://api.example.com\" + \"C:\\\\logs\\\\app.log\"");
-        Assert.That(result, Is.EqualTo("\"<url_1>\" + \"<path_1>\""));
+        Assert.That(result, Is.EqualTo("\"url1\" + \"path1\""));
     }
 
     // -----------------------------------------------------------------------
@@ -326,7 +326,7 @@ public class StringBasedObfuscatorTests
             public void TypeName1()
                         {
                             // <comment>
-                            var localVar1 = "<url_1>";
+                            var localVar1 = "url1";
                             _field1.TypeName2(localVar1);
                         }
             """;

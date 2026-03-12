@@ -19,7 +19,8 @@ import kotlin.jvm.JvmStatic
  * #### Generated from [LLMaskModel.kt:7]
  */
 class LLMaskModel private constructor(
-    private val _obfuscateFile: RdCall<String, String>
+    private val _obfuscateFile: RdCall<String, String>,
+    private val _isPsiObfuscationEnabled: RdOptionalProperty<Boolean>
 ) : RdExtBase() {
     //companion
     
@@ -46,7 +47,7 @@ class LLMaskModel private constructor(
         }
         
         
-        const val serializationHash = -5166291633154748389L
+        const val serializationHash = -8690633136334751269L
         
     }
     override val serializersOwner: ISerializersOwner get() = LLMaskModel
@@ -54,16 +55,23 @@ class LLMaskModel private constructor(
     
     //fields
     val obfuscateFile: IRdCall<String, String> get() = _obfuscateFile
+    val isPsiObfuscationEnabled: IOptProperty<Boolean> get() = _isPsiObfuscationEnabled
     //methods
     //initializer
     init {
+        _isPsiObfuscationEnabled.optimizeNested = true
+    }
+    
+    init {
         bindableChildren.add("obfuscateFile" to _obfuscateFile)
+        bindableChildren.add("isPsiObfuscationEnabled" to _isPsiObfuscationEnabled)
     }
     
     //secondary constructor
     private constructor(
     ) : this(
-        RdCall<String, String>(FrameworkMarshallers.String, FrameworkMarshallers.String)
+        RdCall<String, String>(FrameworkMarshallers.String, FrameworkMarshallers.String),
+        RdOptionalProperty<Boolean>(FrameworkMarshallers.Bool)
     )
     
     //equals trait
@@ -73,13 +81,15 @@ class LLMaskModel private constructor(
         printer.println("LLMaskModel (")
         printer.indent {
             print("obfuscateFile = "); _obfuscateFile.print(printer); println()
+            print("isPsiObfuscationEnabled = "); _isPsiObfuscationEnabled.print(printer); println()
         }
         printer.print(")")
     }
     //deepClone
     override fun deepClone(): LLMaskModel   {
         return LLMaskModel(
-            _obfuscateFile.deepClonePolymorphic()
+            _obfuscateFile.deepClonePolymorphic(),
+            _isPsiObfuscationEnabled.deepClonePolymorphic()
         )
     }
     //contexts

@@ -6,6 +6,7 @@ using JetBrains.Diagnostics;
 using JetBrains.ProjectModel;
 using JetBrains.ReSharper.Feature.Services.ContextActions;
 using JetBrains.ReSharper.Feature.Services.CSharp.ContextActions;
+using JetBrains.ReSharper.Psi;
 using JetBrains.ReSharper.Psi.Tree;
 using JetBrains.TextControl;
 using JetBrains.Util;
@@ -27,19 +28,27 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
     public override string Text => "LLMask: Obfuscate and copy to clipboard";
 
     public override bool IsAvailable(IUserDataHolder cache)
-        => provider.GetSelectedElement<ITreeNode>() != null
-           && !provider.DocumentSelection.IsEmpty;
+    {
+        var element = provider.GetSelectedElement<ITreeNode>();
+        if (element == null || provider.DocumentSelection.IsEmpty)
+            return false;
+
+        // Hide the context action entirely when string-based obfuscation is disabled.
+        // We read settings via the selected element's solution so we don't inject
+        // ISettingsStore in the constructor (which would silently break the factory).
+        var settings = element.GetSolution()
+            .GetComponent<ISettingsStore>()
+            .BindToContextTransient(ContextRange.ApplicationWide)
+            .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
+
+        return settings.UseStringObfuscation;
+    }
 
     protected override Action<ITextControl> ExecutePsiTransaction(ISolution solution, IProgressIndicator progress)
     {
         var settings = solution.GetComponent<ISettingsStore>()
                                .BindToContextTransient(ContextRange.ApplicationWide)
                                .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
-        
-        if (!settings.UseStringObfuscation)
-        {
-            return null;
-        }
 
         var extraWords = string.IsNullOrWhiteSpace(settings.CustomWhitelist)
             ? null
@@ -56,7 +65,7 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
                 .Where(w => w.Length > 0);
 
         var selectionRange = provider.DocumentSelection;
-        
+
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);

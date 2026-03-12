@@ -7,5 +7,12 @@ Implement some settings options for the plugin so the user can toggle between th
 
 Approach-unspecific features like:
 
+- context action to add a token to the whitelist directly
 - Obfuscation "Themes" (for one class/file, obfuscate with related but basic terms (customer, order, productId, price) based on very basic semantics)
 - probably more QOL stuff to come
+
+
+
+
+
+current:

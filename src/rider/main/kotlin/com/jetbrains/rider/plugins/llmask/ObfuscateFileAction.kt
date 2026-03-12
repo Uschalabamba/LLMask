@@ -15,8 +15,25 @@ class ObfuscateFileAction : AnAction() {
 
     override fun update(e: AnActionEvent) {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabledAndVisible =
-            file != null && !file.isDirectory && file.extension?.lowercase() == "cs"
+        val project = e.project
+
+        // Basic file filter — must be a .cs file with a loaded project
+        if (file == null || file.isDirectory || file.extension?.lowercase() != "cs" || project == null) {
+            e.presentation.isEnabledAndVisible = false
+            return
+        }
+
+        // Hide the action if PSI obfuscation is disabled in settings.
+        // isPsiObfuscationEnabled is a reactive property pushed from LLMaskHost
+        // whenever the setting changes.  valueOrNull is null while the model is
+        // not yet bound (early startup); default to visible in that case.
+        val enabled = project.solution.protocol
+            ?.lLMaskModel
+            ?.isPsiObfuscationEnabled
+            ?.valueOrNull
+            ?: true
+
+        e.presentation.isEnabledAndVisible = enabled
     }
 
     override fun actionPerformed(e: AnActionEvent) {
