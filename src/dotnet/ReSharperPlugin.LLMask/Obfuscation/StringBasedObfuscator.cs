@@ -24,7 +24,8 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 ///     depending on whether the content looks like a plain string, a file path,
 ///     or a URL.  The same literal value always maps to the same placeholder.
 ///   - Block/line/doc comments are replaced with /* <comment> */ or // <comment>.
-///   - Char literals are kept verbatim (single characters are not proprietary).
+///   - Char literals and single-character string literals are kept verbatim
+///     (single characters carry no proprietary information).
 ///   - Numbers, operators, and whitespace are kept verbatim.
 /// </summary>
 public static class StringBasedObfuscator
@@ -97,12 +98,20 @@ public static class StringBasedObfuscator
                      || m.Groups["VerbatimString"].Success
                      || m.Groups["RegularString"].Success)
             {
-                if (!strMap.TryGetValue(raw, out var strPlaceholder))
+                var content = ExtractStringContent(raw);
+                if (content.Length == 1)
                 {
-                    strPlaceholder = MakeStringPlaceholder(ExtractStringContent(raw), strCounters);
-                    strMap[raw] = strPlaceholder;
+                    sb.Append(raw); // single-char strings carry no proprietary information
                 }
-                sb.Append(strPlaceholder);
+                else
+                {
+                    if (!strMap.TryGetValue(raw, out var strPlaceholder))
+                    {
+                        strPlaceholder = MakeStringPlaceholder(content, strCounters);
+                        strMap[raw] = strPlaceholder;
+                    }
+                    sb.Append(strPlaceholder);
+                }
             }
             else if (m.Groups["CharLiteral"].Success)
             {

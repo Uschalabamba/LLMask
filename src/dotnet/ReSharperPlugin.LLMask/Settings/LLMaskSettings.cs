@@ -18,6 +18,9 @@ public class LLMaskSettings
     [SettingsEntry(true, "Obfuscate an entire .cs file using PSI-based analysis when triggering the file action")]
     public bool UsePsiObfuscation;
 
+    [SettingsEntry(true, "Sort obfuscated identifiers by usage frequency so the most-used names get the lowest numbers")]
+    public bool UsePsiFrequencySorting;
+
     [SettingsEntry("", "Comma-separated list of additional identifiers to preserve (not obfuscate)")]
     public string CustomWhitelist;
 

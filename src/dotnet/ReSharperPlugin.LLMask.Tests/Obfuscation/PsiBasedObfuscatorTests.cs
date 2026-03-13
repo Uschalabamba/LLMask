@@ -51,6 +51,33 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
         return result;
     }
 
+    // ── Frequency ordering ────────────────────────────────────────────────────
+
+    [Test]
+    [Description("A method declared later in the file but called more often must get a lower placeholder number")]
+    public void FrequencyOrdering_MoreFrequentMethod_GetsLowerNumber()
+    {
+        var output = ObfuscateFile("FrequencyOrdering.cs");
+        // 'Common' is called 5 times, 'Rare' only once.
+        // Despite 'Rare' being declared first, 'Common' must get SomeMethod1.
+        Assert.That(output, Does.Contain("SomeMethod1()").And.Not.Contain("SomeMethod1\n"),
+            "'Common' (5 calls) must be assigned SomeMethod1");
+        Assert.That(output, Does.Contain("SomeMethod2()"),
+            "'Rare' (1 call) must be assigned SomeMethod2");
+    }
+
+    [Test]
+    [Description("The less-frequent method declared first must not 'steal' the SomeMethod1 slot")]
+    public void FrequencyOrdering_LessFrequentMethod_DoesNotGetLowestNumber()
+    {
+        var output = ObfuscateFile("FrequencyOrdering.cs");
+        // 'Rare' must not be SomeMethod1 — that belongs to the most-used method.
+        var rareCount = output.Split(["SomeMethod1"], System.StringSplitOptions.None).Length - 1;
+        // SomeMethod1 appears: 1 declaration + 5 call sites = 6 times (for 'Common')
+        Assert.That(rareCount, Is.GreaterThan(1),
+            "SomeMethod1 should appear multiple times because it maps to the heavily-used 'Common'");
+    }
+
     // ── For loop ──────────────────────────────────────────────────────────────
 
     [Test]
@@ -228,6 +255,48 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
             "Block comment text must not appear in the output");
         Assert.That(output, Does.Not.Contain("/*"),
             "The '/*' token itself must be dropped — block comments are removed, not replaced");
+    }
+
+    // ── Single-character literals ─────────────────────────────────────────────
+
+    [Test]
+    [Description("Char literals must always pass through verbatim")]
+    public void SingleCharLiterals_CharLiteral_IsPreservedVerbatim()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Contain("'x'"),
+            "Char literal 'x' must appear verbatim in the output");
+    }
+
+    [Test]
+    [Description("A single-character regular string literal must pass through verbatim")]
+    public void SingleCharLiterals_SingleCharRegularString_IsPreservedVerbatim()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Contain("\"a\""),
+            "Single-char string literal \"a\" must appear verbatim in the output");
+    }
+
+    [Test]
+    [Description("A single-character verbatim string literal must pass through verbatim")]
+    public void SingleCharLiterals_SingleCharVerbatimString_IsPreservedVerbatim()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Contain("@\"z\""),
+            "Single-char verbatim string literal @\"z\" must appear verbatim in the output");
+    }
+
+    [Test]
+    [Description("Multi-character string literals must still be replaced even when single-char ones are preserved")]
+    public void SingleCharLiterals_MultiCharStrings_AreObfuscated()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Not.Contain("\"hello\""),
+            "Multi-char string literal \"hello\" must be replaced");
+        Assert.That(output, Does.Not.Contain("\"world\""),
+            "Multi-char verbatim string @\"world\" must be replaced");
+        Assert.That(output, Does.Contain("\"someString"),
+            "Multi-char strings must produce a 'someString' placeholder");
     }
 
     // ── Using directives ──────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
     {
         AddHeader("PSI-Based Obfuscation (full file)");
         AddBoolOption((LLMaskSettings s) => s.UsePsiObfuscation, "Enable PSI-based obfuscation (right-click a .cs file → LLMask: Obfuscate file)");
+        AddBoolOption((LLMaskSettings s) => s.UsePsiFrequencySorting, "Sort identifiers by frequency (most-used names get the lowest numbers, e.g. SomeMethod1)");
 
         AddHeader("String-Based Obfuscation (selection)");
         AddBoolOption((LLMaskSettings s) => s.UseStringObfuscation, "Enable string-based obfuscation");

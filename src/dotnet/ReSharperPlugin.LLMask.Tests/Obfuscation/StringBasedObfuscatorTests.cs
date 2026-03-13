@@ -249,6 +249,31 @@ public class StringBasedObfuscatorTests
         => Assert.That(StringBasedObfuscator.Obfuscate(charLiteral), Is.EqualTo(charLiteral));
 
     // -----------------------------------------------------------------------
+    // Single-character string literals — kept verbatim (no proprietary info)
+    // -----------------------------------------------------------------------
+
+    [TestCase("\"a\"")]
+    [TestCase("\"Z\"")]
+    [TestCase("\"0\"")]
+    public void Obfuscate_SingleCharRegularString_IsPreserved(string literal)
+        => Assert.That(StringBasedObfuscator.Obfuscate(literal), Is.EqualTo(literal));
+
+    [Test]
+    public void Obfuscate_SingleCharVerbatimString_IsPreserved()
+        => Assert.That(StringBasedObfuscator.Obfuscate("@\"x\""), Is.EqualTo("@\"x\""));
+
+    [Test]
+    public void Obfuscate_MultiCharString_IsStillObfuscated()
+        => Assert.That(StringBasedObfuscator.Obfuscate("\"ab\""), Is.EqualTo("\"someString1\""));
+
+    [Test]
+    public void Obfuscate_SingleCharAndMultiCharStrings_OnlyMultiCharIsReplaced()
+    {
+        var result = StringBasedObfuscator.Obfuscate("\"a\" + \"hello\"");
+        Assert.That(result, Is.EqualTo("\"a\" + \"someString1\""));
+    }
+
+    // -----------------------------------------------------------------------
     // Structural tokens — numbers, operators, whitespace, punctuation
     // -----------------------------------------------------------------------
 

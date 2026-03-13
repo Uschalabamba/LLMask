@@ -74,7 +74,7 @@ public class LLMaskHost : IStartupActivity
                 var psiFile = projectFile?.ToSourceFile()?.GetPrimaryPsiFile() as ICSharpFile;
                 if (psiFile == null) return string.Empty;
 
-                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, baseWords);
+                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, baseWords, settings.UsePsiFrequencySorting);
             }
         });
 #endif

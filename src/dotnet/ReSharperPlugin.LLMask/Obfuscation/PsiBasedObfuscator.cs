@@ -1,6 +1,8 @@
 #nullable enable
+using JetBrains.Collections;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using JetBrains.ReSharper.Psi.CSharp.Parsing;
 using JetBrains.ReSharper.Psi.CSharp.Tree;
@@ -13,15 +15,22 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 /// Obfuscates a C# file by walking its PSI tree and replacing identifiers,
 /// string literals, and comments with generic placeholders.
 ///
-/// Two-pass strategy:
-///   Pass 1 — walks all ICSharpDeclaration nodes to register declared names
-///             with human-friendly prefixes (MyClass, SomeMethod, _myField, …).
+/// Three-pass strategy:
+///   Pass 0 — counts every IDENTIFIER token occurrence so that frequently-used
+///             names receive lower placeholder numbers (SomeMethod1 for the most
+///             common, SomeMethod2 for the next, etc.).
+///   Pass 1 — walks all ICSharpDeclaration nodes to register declared names with
+///             human-friendly prefixes (MyClass, SomeMethod, _myField, …).
+///             Also scans all IDENTIFIER tokens to collect external (undeclared)
+///             identifiers and their heuristic prefixes.
+///             Both pools are then sorted by descending frequency and assigned
+///             sequential numbers within each prefix group.
 ///   Pass 2 — walks all ITokenNode tokens and builds the output:
-///             · Known identifiers look up their registered placeholder.
-///             · Unknown identifiers (external types/methods) fall back to a
-///               context-aware heuristic: invocation context wins over text shape.
-///             · String literals are replaced with "<str_N>", "<path_N>", "<url_N>".
-///             · Comments are replaced with // <comment> or /* <comment> */.
+///             · Known identifiers look up their pre-assigned placeholder.
+///             · Unknown identifiers (missed by the pre-scan) fall back to lazy
+///               assignment using the same counter, so output is always consistent.
+///             · String literals are replaced with "someStringN", "pathN", "urlN".
+///             · Comments are stripped.
 /// </summary>
 public static class PsiBasedObfuscator
 {
@@ -31,7 +40,8 @@ public static class PsiBasedObfuscator
     public static string Obfuscate(
         ICSharpFile file,
         IEnumerable<string>? extraPreservedWords = null,
-        IEnumerable<string>? basePreservedWords = null)
+        IEnumerable<string>? basePreservedWords = null,
+        bool sortByFrequency = true)
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
@@ -43,16 +53,31 @@ public static class PsiBasedObfuscator
             extra = new HashSet<string>(extraPreservedWords, StringComparer.Ordinal);
         }
 
-        // category prefix → next available number
-        var counters    = new Dictionary<string, int>(StringComparer.Ordinal);
         var strCounters = new int[3]; // [0] str  [1] path  [2] url
-
-        // identifier text → assigned placeholder
-        var idMap  = new Dictionary<string, string>(StringComparer.Ordinal);
         var strMap = new Dictionary<string, string>(StringComparer.Ordinal);
         var sb     = new StringBuilder();
 
-        // ── Pass 1: register every declared name ─────────────────────────────
+        // ── Pass 0: count identifier token frequencies ────────────────────────
+        // Only needed when frequency-sorted numbering is enabled.
+        var freq = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (sortByFrequency)
+        {
+            foreach (var token in file.Descendants<ITokenNode>())
+            {
+                if (token.GetTokenType() != CSharpTokenType.IDENTIFIER)
+                {
+                    continue;
+                }
+
+                var t = token.GetText();
+                freq[t] = freq.GetValueOrDefault(t, 0) + 1;
+            }
+        }
+
+        // ── Pass 1a: collect declared identifiers (name → prefix) ─────────────
+        // Only the first occurrence per name is kept (partial classes etc. may
+        // declare the same name more than once).
+        var declaredPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var decl in file.Descendants<ICSharpDeclaration>())
         {
             var name = decl.DeclaredName;
@@ -66,7 +91,7 @@ public static class PsiBasedObfuscator
                 continue;
             }
 
-            if (idMap.ContainsKey(name))
+            if (declaredPrefix.ContainsKey(name))
             {
                 continue;
             }
@@ -78,20 +103,97 @@ public static class PsiBasedObfuscator
             }
 
             // Single-character generic locals (e.g. int a = …) don't leak proprietary
-            // information and just create noise.  Skip them so they pass through
-            // verbatim in Pass 2.  Semantic prefixes (idx, elem) are still registered
-            // even for single-char names so the LLM gets meaningful context.
+            // information and just create noise — skip so they pass through verbatim.
             if (name.Length == 1 && prefix == "localVar")
             {
                 continue;
             }
 
-            counters.TryGetValue(prefix, out var n);
-            idMap[name]    = $"{prefix}{n + 1}";
-            counters[prefix] = n + 1;
+            declaredPrefix[name] = prefix;
         }
 
-        // ── Pre-pass: build directive replacements without touching composite node text ──
+        // ── Pass 1b: collect external (undeclared) identifiers ───────────────
+        // Only needed for frequency-sorted mode, where all identifiers must be
+        // pre-assigned before Pass 2.  In tree-order mode, external identifiers
+        // are assigned lazily in Pass 2 (same as the original behaviour).
+        var externalPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (sortByFrequency)
+        {
+            foreach (var token in file.Descendants<ITokenNode>())
+            {
+                if (GetContainingUsingDirective(token) != null)
+                {
+                    continue;
+                }
+
+                if (token.GetTokenType() != CSharpTokenType.IDENTIFIER)
+                {
+                    continue;
+                }
+
+                var raw = token.GetText();
+                if (baseWords.Contains(raw) || (extra != null && extra.Contains(raw)))
+                {
+                    continue;
+                }
+
+                if (declaredPrefix.ContainsKey(raw))
+                {
+                    continue;
+                }
+
+                if (externalPrefix.ContainsKey(raw))
+                {
+                    continue;
+                }
+
+                if (raw.Length == 1)
+                {
+                    continue;
+                }
+
+                externalPrefix[raw] = GetHeuristicPrefix(raw, token);
+            }
+        }
+
+        // ── Assign numbers ────────────────────────────────────────────────────
+        // When sortByFrequency: merge declared + external, sort each prefix group
+        // by descending frequency, then assign 1, 2, 3 …
+        // When !sortByFrequency: assign declared identifiers in tree-walk order;
+        // external identifiers are left for lazy assignment in Pass 2.
+        var idMap    = new Dictionary<string, string>(StringComparer.Ordinal);
+        var counters = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        if (sortByFrequency)
+        {
+            var allCandidates = new Dictionary<string, string>(declaredPrefix, StringComparer.Ordinal);
+            foreach (var (name, prefix) in externalPrefix)
+            {
+                allCandidates[name] = prefix;
+            }
+
+            foreach (var group in allCandidates.GroupBy(kv => kv.Value))
+            {
+                var n = 0;
+                foreach (var kv in group.OrderByDescending(kv => freq.GetValueOrDefault(kv.Key, 0)))
+                {
+                    idMap[kv.Key] = $"{kv.Value}{++n}";
+                }
+                counters[group.Key] = n;
+            }
+        }
+        else
+        {
+            // Tree-order: assign declared names sequentially as they were collected.
+            foreach (var (name, prefix) in declaredPrefix)
+            {
+                counters.TryGetValue(prefix, out var n);
+                idMap[name]      = $"{prefix}{n + 1}";
+                counters[prefix] = n + 1;
+            }
+        }
+
+        // ── Pre-pass: build directive replacements ────────────────────────────
         // Calling GetText() on a composite IUsingDirective node can trigger internal
         // declared-element resolution for resolvable namespaces (System, Microsoft, …),
         // which conflicts with concurrent code completion and causes "declaredElement
@@ -105,7 +207,10 @@ public static class PsiBasedObfuscator
             {
                 var buf = new StringBuilder();
                 foreach (var t in directive.Descendants<ITokenNode>())
+                {
                     buf.Append(t.GetText());
+                }
+
                 replacement = buf.ToString().TrimEnd();
             }
             else
@@ -115,7 +220,7 @@ public static class PsiBasedObfuscator
             directiveReplacements[directive] = replacement;
         }
 
-        // ── Pass 2: walk tokens and build output ─────────────────────────────
+        // ── Pass 2: walk tokens and build output ──────────────────────────────
         var emittedUsings = new HashSet<IUsingDirective>();
         foreach (var token in file.Descendants<ITokenNode>())
         {
@@ -129,7 +234,6 @@ public static class PsiBasedObfuscator
                         ? rep
                         : "using SomeNamespace;");
                 }
-
                 continue;
             }
 
@@ -144,13 +248,20 @@ public static class PsiBasedObfuscator
             }
             else if (IsStringLiteralToken(tokenType))
             {
-                if (!strMap.TryGetValue(raw, out var strPlaceholder))
+                var content = StringBasedObfuscator.ExtractStringContent(raw);
+                if (content.Length == 1)
                 {
-                    strPlaceholder = StringBasedObfuscator.MakeStringPlaceholder(
-                        StringBasedObfuscator.ExtractStringContent(raw), strCounters);
-                    strMap[raw] = strPlaceholder;
+                    sb.Append(raw); // single-char strings carry no proprietary information
                 }
-                sb.Append(strPlaceholder);
+                else
+                {
+                    if (!strMap.TryGetValue(raw, out var strPlaceholder))
+                    {
+                        strPlaceholder = StringBasedObfuscator.MakeStringPlaceholder(content, strCounters);
+                        strMap[raw] = strPlaceholder;
+                    }
+                    sb.Append(strPlaceholder);
+                }
             }
             else if (tokenType == CSharpTokenType.CHARACTER_LITERAL)
             {
@@ -164,24 +275,21 @@ public static class PsiBasedObfuscator
                 }
                 else if (idMap.TryGetValue(raw, out var placeholder))
                 {
-                    // Registered names include semantic labels:
-                    //   idx   – for-loop counters        elem – foreach elements
-                    //   param – lambda / method params   and all other declared symbols.
                     sb.Append(placeholder);
                 }
                 else if (raw.Length == 1)
                 {
-                    // Unregistered single-character identifiers (ad-hoc locals,
-                    // external single-char type refs) carry no proprietary information.
+                    // Unregistered single-character identifiers carry no proprietary information.
                     sb.Append(raw);
                 }
                 else
                 {
-                    // Unknown identifier (external type/method) — context heuristic.
+                    // Fallback: identifier missed by the pre-scans (should be rare).
+                    // Assign lazily, continuing from the pre-assigned counters.
                     var prefix = GetHeuristicPrefix(raw, token);
                     counters.TryGetValue(prefix, out var n);
                     var newPlaceholder = $"{prefix}{n + 1}";
-                    idMap[raw]       = newPlaceholder; // cache for consistent reuse
+                    idMap[raw]       = newPlaceholder;
                     counters[prefix] = n + 1;
                     sb.Append(newPlaceholder);
                 }
@@ -245,8 +353,15 @@ public static class PsiBasedObfuscator
     {
         for (var node = param.Parent; node != null; node = node.Parent)
         {
-            if (node is ILambdaExpression) return true;
-            if (node is ICSharpFunctionDeclaration || node is IClassDeclaration) return false;
+            if (node is ILambdaExpression)
+            {
+                return true;
+            }
+
+            if (node is ICSharpFunctionDeclaration || node is IClassDeclaration)
+            {
+                return false;
+            }
         }
         return false;
     }
@@ -268,8 +383,15 @@ public static class PsiBasedObfuscator
             // IForeachStatement must be checked before IForStatement because it is
             // a subtype in the ReSharper PSI hierarchy — checking the more general
             // type first would match foreach and wrongly return "index".
-            if (node is IForeachStatement) return "element";
-            if (node is IForStatement)     return "index";
+            if (node is IForeachStatement)
+            {
+                return "element";
+            }
+
+            if (node is IForStatement)
+            {
+                return "index";
+            }
 
             // Stop at block / function boundaries so a variable declared
             // *inside* a loop body is not treated as the loop counter.
@@ -290,8 +412,15 @@ public static class PsiBasedObfuscator
     {
         for (var node = designation.Parent; node != null; node = node.Parent)
         {
-            if (node is IForeachStatement) return "element";
-            if (node is IBlock || node is ICSharpFunctionDeclaration) break;
+            if (node is IForeachStatement)
+            {
+                return "element";
+            }
+
+            if (node is IBlock || node is ICSharpFunctionDeclaration)
+            {
+                break;
+            }
         }
         return "localVar";
     }
