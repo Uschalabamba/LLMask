@@ -35,8 +35,11 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 /// </summary>
 public static class PsiBasedObfuscator
 {
-    private static readonly HashSet<string> DefaultPreservedWords =
-        new(CSharpIdentifierData.DefaultBaseWhitelist.Split(','), StringComparer.Ordinal);
+    private static readonly Lazy<HashSet<string>> DefaultPreservedWords =
+        new(() => new HashSet<string>(LLMaskDataProvider.GetEmbedded().BaseWhitelist, StringComparer.Ordinal));
+
+    private static readonly Lazy<HashSet<string>> DefaultWellKnownRoots =
+        new(() => new HashSet<string>(LLMaskDataProvider.GetEmbedded().WellKnownNamespaceRoots, StringComparer.Ordinal));
 
     public static string Obfuscate(
         ICSharpFile file,
@@ -48,7 +51,7 @@ public static class PsiBasedObfuscator
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
-            : DefaultPreservedWords;
+            : DefaultPreservedWords.Value;
 
         HashSet<string>? extra = null;
         if (extraPreservedWords != null)
@@ -58,7 +61,7 @@ public static class PsiBasedObfuscator
 
         var wellKnownRootsSet = wellKnownRoots != null
             ? new HashSet<string>(wellKnownRoots, StringComparer.Ordinal)
-            : CSharpIdentifierData.WellKnownNamespaceRoots;
+            : DefaultWellKnownRoots.Value;
 
         var strCounters = new int[3]; // [0] str  [1] path  [2] url
         var strMap = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -85,6 +88,9 @@ public static class PsiBasedObfuscator
         // Only the first occurrence per name is kept (partial classes etc. may
         // declare the same name more than once).
         var declaredPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Tracks which abbreviation (e.g. "tb") has been claimed by which type short
+        // name (e.g. "TextBox") for two-level collision resolution.
+        var abbrToType = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var decl in file.Descendants<ICSharpDeclaration>())
         {
             var name = decl.DeclaredName;
@@ -109,11 +115,27 @@ public static class PsiBasedObfuscator
                 continue;
             }
 
-            // Single-character generic locals (e.g. int a = …) don't leak proprietary
-            // information and just create noise — skip so they pass through verbatim.
-            if (name.Length == 1 && prefix == "localVar")
+            // Single-character identifiers carry no proprietary information and pass
+            // through verbatim in Pass 2.  This covers generic local variables (a, b)
+            // and conventional short method-parameter names (e for EventArgs, s for
+            // string, etc.).  For-loop counters (index prefix) and lambda/foreach
+            // variables (element prefix) are intentionally excluded so they still
+            // receive a semantic label (index1, element1) that documents their role.
+            if (name.Length == 1 && prefix is "localVar" or "param")
             {
                 continue;
+            }
+
+            // For local variables of well-known BCL/framework types, derive a short
+            // prefix from the type's CamelCase initials (e.g. TextBox → "tb",
+            // Random → "r") so the output reads "tb1" instead of "localVar17".
+            // Proprietary-type locals are intentionally excluded — revealing initials
+            // would partially leak the type name.
+            if (prefix == "localVar" && useAssemblyResolution && decl is ILocalVariableDeclaration localDecl)
+            {
+                var abbr = TryGetTypeAbbreviationPrefix(localDecl, wellKnownRootsSet, abbrToType);
+                if (abbr != null)
+                    prefix = abbr;
             }
 
             declaredPrefix[name] = prefix;
@@ -237,6 +259,93 @@ public static class PsiBasedObfuscator
                 if (wellKnownRootsSet.Contains(nsRoot))
                 {
                     resolvedSafeNames.Add(name);
+                    // Also preserve the containing type's own short name so that type
+                    // names used as static qualifiers are kept verbatim too.
+                    // e.g. when processing "Black" from "Brushes.Black", containingType
+                    // is Brushes → adds "Brushes" as well.
+                    var typeShortName = containingType.GetClrName().ShortName;
+                    if (!string.IsNullOrEmpty(typeShortName) && typeShortName.Length > 1)
+                        resolvedSafeNames.Add(typeShortName);
+                }
+            }
+
+            // ── Pass 1c (type usages): walk IUserTypeUsage nodes ─────────────────
+            // IReferenceExpression only covers expression-context references.
+            // Type names in type positions — base classes, new expressions, variable
+            // type annotations, parameter types, cast targets, etc. — live inside
+            // IUserTypeUsage nodes and are completely invisible to the expression walk.
+            foreach (var typeUsage in file.Descendants<IUserTypeUsage>())
+            {
+                var typeName = typeUsage.ScalarTypeName;
+                if (typeName == null)
+                    continue;
+
+                var name = typeName.ShortName;
+                if (string.IsNullOrEmpty(name) || name.Length <= 1)
+                    continue;
+
+                if (resolvedSafeNames.Contains(name))
+                    continue; // already resolved
+
+                if (baseWords.Contains(name) || (extra != null && extra.Contains(name)))
+                    continue;
+
+                var element = typeName.Reference?.Resolve().DeclaredElement as ITypeElement;
+                if (element == null)
+                    continue;
+
+                var fullTypeName = element.GetClrName().FullName;
+                var firstDot = fullTypeName.IndexOf('.');
+                if (firstDot <= 0)
+                    continue;
+
+                var nsRoot = fullTypeName.Substring(0, firstDot);
+                if (wellKnownRootsSet.Contains(nsRoot))
+                    resolvedSafeNames.Add(name);
+            }
+
+            // ── Pass 1c (object initialiser properties) ───────────────────────────
+            // Property names in object initialisers (e.g. "Width" in
+            // new TextBox { Width = 100 }) live inside IPropertyInitializer nodes
+            // as bare Identifier tokens.  They are completely invisible to the
+            // IReferenceExpression walk (no qualifier) and to the IUserTypeUsage
+            // walk (they are not type references).
+            // IMemberInitializer.Reference resolves to the IProperty/IField element,
+            // from which we can navigate to the declaring type's namespace.
+            foreach (var propInit in file.Descendants<IPropertyInitializer>())
+            {
+                var name = propInit.MemberName;
+                if (string.IsNullOrEmpty(name) || name.Length <= 1)
+                    continue;
+
+                if (resolvedSafeNames.Contains(name))
+                    continue;
+
+                if (baseWords.Contains(name) || (extra != null && extra.Contains(name)))
+                    continue;
+
+                var element = propInit.Reference?.Resolve().DeclaredElement as ITypeMember;
+                if (element == null)
+                    continue;
+
+                var containingType = element.ContainingType;
+                if (containingType == null)
+                    continue;
+
+                var fullTypeName = containingType.GetClrName().FullName;
+                var firstDot = fullTypeName.IndexOf('.');
+                if (firstDot <= 0)
+                    continue;
+
+                var nsRoot = fullTypeName.Substring(0, firstDot);
+                if (wellKnownRootsSet.Contains(nsRoot))
+                {
+                    resolvedSafeNames.Add(name);
+                    // Also preserve the declaring type's own short name (same
+                    // enrichment as the IReferenceExpression path above).
+                    var typeShortName = containingType.GetClrName().ShortName;
+                    if (!string.IsNullOrEmpty(typeShortName) && typeShortName.Length > 1)
+                        resolvedSafeNames.Add(typeShortName);
                 }
             }
         }
@@ -296,7 +405,7 @@ public static class PsiBasedObfuscator
         foreach (var directive in file.Descendants<IUsingDirective>())
         {
             string replacement;
-            if (IsWellKnownUsing(directive, wellKnownRootsSet))
+            if (IsWellKnownUsing(directive, wellKnownRootsSet, extra))
             {
                 var buf = new StringBuilder();
                 foreach (var t in directive.Descendants<ITokenNode>())
@@ -338,6 +447,14 @@ public static class PsiBasedObfuscator
             {
                 // Drop comments entirely — they add noise without leaking proprietary
                 // information. Covers //, /// XML-doc, and /* */ block comments.
+            }
+            else if (IsInterpolatedStringPart(tokenType))
+            {
+                // Emit structural delimiters verbatim; obfuscate only the text fragment
+                // between them (e.g. the "r" in $"r{…}" or " c" in }· c{).
+                // Short fragments (≤ 1 non-whitespace char) are kept verbatim because
+                // they carry no proprietary information.
+                sb.Append(ObfuscateInterpolatedStringPart(raw, tokenType, strCounters));
             }
             else if (IsStringLiteralToken(tokenType))
             {
@@ -575,7 +692,7 @@ public static class PsiBasedObfuscator
     /// Returns true when the directive's root namespace segment is well-known
     /// (e.g. System, Serilog, Xunit) and its text can be emitted verbatim.
     /// Only plain namespace directives are checked; alias directives are always replaced.
-    private static bool IsWellKnownUsing(IUsingDirective directive, HashSet<string> roots)
+    private static bool IsWellKnownUsing(IUsingDirective directive, HashSet<string> roots, HashSet<string>? extra)
     {
         // Alias directives (using Alias = Foo.Bar) are always replaced.
         if (directive is IUsingAliasDirective)
@@ -607,7 +724,7 @@ public static class PsiBasedObfuscator
                 continue;
             }
 
-            return roots.Contains(root);
+            return roots.Contains(root) || (extra != null && extra.Contains(root));
         }
 
         return false;
@@ -631,22 +748,186 @@ public static class PsiBasedObfuscator
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Type-abbreviation prefix derivation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Attempts to derive a short prefix from the declared type of a local variable.
+    /// Returns <c>null</c> when the type is not from a well-known namespace (i.e. the
+    /// variable should keep the generic <c>localVar</c> prefix).
+    /// </summary>
+    private static string? TryGetTypeAbbreviationPrefix(
+        ILocalVariableDeclaration decl,
+        HashSet<string> wellKnownRoots,
+        Dictionary<string, string> abbrToType)
+    {
+        // Works for both explicit types and var-inferred types.
+        if (decl.DeclaredElement is not ILocalVariable localVar) return null;
+        // Skip non-named types (arrays, pointers, type parameters, …).
+        if (localVar.Type is not IDeclaredType declaredType) return null;
+
+        var typeElement = declaredType.GetTypeElement();
+        if (typeElement == null) return null;
+
+        var fullName = typeElement.GetClrName().FullName;
+        var firstDot = fullName.IndexOf('.');
+        if (firstDot <= 0) return null;                                        // no namespace
+        if (!wellKnownRoots.Contains(fullName.Substring(0, firstDot))) return null; // proprietary
+
+        // ShortName strips generic arity suffix: "List`1" → "List", "Dictionary`2" → "Dictionary"
+        var shortName = typeElement.GetClrName().ShortName;
+        if (string.IsNullOrEmpty(shortName)) return null;
+
+        return ResolveAbbreviation(shortName, abbrToType);
+    }
+
+    /// <summary>
+    /// Returns the abbreviation to use as a placeholder prefix for variables of the
+    /// given type short name, handling collisions via a two-level escalation:
+    /// <list type="bullet">
+    ///   <item>Level 1 — uppercase letters only: <c>TextBox</c> → <c>tb</c></item>
+    ///   <item>Level 2 — uppercase + next char (if level 1 is taken by a different type):
+    ///         <c>TextBox</c> → <c>tebo</c>, <c>TableBrowser</c> → <c>tabr</c></item>
+    /// </list>
+    /// </summary>
+    private static string ResolveAbbreviation(string shortName, Dictionary<string, string> abbrToType)
+    {
+        var level1 = ExtractInitials(shortName);
+        // Require at least 2 characters so single-component type names (Int32 → "i",
+        // List → "l", Random → "r") don't get abbreviated — they'd produce noisy
+        // single-letter prefixes indistinguishable from loop counters or local chars.
+        if (level1.Length < 2) return "localVar";
+
+        if (!abbrToType.TryGetValue(level1, out var owner) || owner == shortName)
+        {
+            abbrToType[level1] = shortName;
+            return level1;
+        }
+
+        // Level 1 already claimed by a different type — escalate.
+        var level2 = ExtractInitialsWithNext(shortName);
+        if (level2.Length == 0) return "localVar";
+        abbrToType[level2] = shortName; // no further collision handling needed
+        return level2;
+    }
+
+    /// <summary>Extracts lowercase uppercase-letter initials: <c>TextBox</c> → <c>tb</c>.</summary>
+    private static string ExtractInitials(string name)
+    {
+        var sb = new StringBuilder();
+        foreach (var c in name)
+        {
+            if (char.IsUpper(c))
+                sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Extracts initials with the following character for collision resolution:
+    /// <c>TextBox</c> → <c>tebo</c>, <c>TableBrowser</c> → <c>tabr</c>.
+    /// </summary>
+    private static string ExtractInitialsWithNext(string name)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (!char.IsUpper(name[i])) continue;
+            sb.Append(char.ToLowerInvariant(name[i]));
+            if (i + 1 < name.Length && !char.IsUpper(name[i + 1]))
+                sb.Append(name[i + 1]);
+        }
+        return sb.ToString();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // String literal token detection
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Regular/verbatim/raw non-interpolated string literals — these are complete
+    // tokens that can be replaced wholesale with a "someStringN" placeholder.
     private static bool IsStringLiteralToken(JetBrains.ReSharper.Psi.Parsing.TokenNodeType tokenType) =>
         tokenType == CSharpTokenType.STRING_LITERAL_REGULAR
         || tokenType == CSharpTokenType.STRING_LITERAL_VERBATIM
         || tokenType == CSharpTokenType.SINGLE_LINE_RAW_STRING_LITERAL
-        || tokenType == CSharpTokenType.MULTI_LINE_RAW_STRING_LITERAL
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_START
+        || tokenType == CSharpTokenType.MULTI_LINE_RAW_STRING_LITERAL;
+
+    // Interpolated string parts that contain a user-visible text fragment between
+    // structural delimiters ($", {, }, ").  Raw interpolated string tokens
+    // ($"""…""") are intentionally excluded and fall through to the verbatim
+    // else branch — their delimiter nesting is too complex to parse safely here.
+    private static bool IsInterpolatedStringPart(JetBrains.ReSharper.Psi.Parsing.TokenNodeType tokenType) =>
+        tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_START
         || tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_MIDDLE
         || tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_END
         || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_START
         || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_MIDDLE
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_END
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_RAW_SINGLE_LINE_START
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_RAW_MULTI_LINE_START
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_RAW_TEXT
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_RAW_END;
+        || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_END;
+
+    /// <summary>
+    /// Processes one fragment of a (non-raw) interpolated string token, keeping
+    /// structural delimiters intact and obfuscating only the text content between them.
+    /// <list type="bullet">
+    ///   <item>START  ($"text{  or  @$"text{): prefix = up-to-and-including '"',  suffix = "{"</item>
+    ///   <item>MIDDLE (}text{):               prefix = "}",                        suffix = "{"</item>
+    ///   <item>END    (}text"  or  }")):      prefix = "}",                        suffix = '"'</item>
+    /// </list>
+    /// Text fragments whose non-whitespace character count is ≤ 1 are kept verbatim;
+    /// longer fragments are replaced with a sequentially-numbered inline placeholder
+    /// (no surrounding quotes — the delimiter quotes already delimit the string).
+    /// </summary>
+    private static string ObfuscateInterpolatedStringPart(
+        string raw,
+        JetBrains.ReSharper.Psi.Parsing.TokenNodeType tokenType,
+        int[] strCounters)
+    {
+        bool isStart = tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_START
+                    || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_START;
+        bool isEnd   = tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_END
+                    || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_END;
+
+        string prefix, suffix, textContent;
+
+        if (isStart)
+        {
+            // Format: $"<text>{   or   @$"<text>{   or   $@"<text>{
+            // The opening quote is the last '"' before the text fragment.
+            var quotePos = raw.IndexOf('"');
+            prefix      = quotePos >= 0 ? raw.Substring(0, quotePos + 1) : "$\"";
+            suffix      = "{";
+            var textStart = quotePos >= 0 ? quotePos + 1 : prefix.Length;
+            // text runs from after the quote to before the trailing '{'
+            textContent = raw.Length > textStart + 1
+                ? raw.Substring(textStart, raw.Length - textStart - 1)
+                : string.Empty;
+        }
+        else if (isEnd)
+        {
+            // Format: }<text>"
+            prefix      = "}";
+            suffix      = "\"";
+            textContent = raw.Length > 2 ? raw.Substring(1, raw.Length - 2) : string.Empty;
+        }
+        else // MIDDLE: }<text>{
+        {
+            prefix      = "}";
+            suffix      = "{";
+            textContent = raw.Length > 2 ? raw.Substring(1, raw.Length - 2) : string.Empty;
+        }
+
+        var nonWsCount = 0;
+        foreach (var c in textContent)
+        {
+            if (!char.IsWhiteSpace(c))
+            {
+                nonWsCount++;
+            }
+        }
+
+        var obfuscatedText = nonWsCount <= 1
+            ? textContent
+            : $"someString{++strCounters[0]}";
+
+        return prefix + obfuscatedText + suffix;
+    }
 }

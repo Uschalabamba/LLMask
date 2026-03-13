@@ -14,6 +14,7 @@ using JetBrains.ReSharper.Psi.CSharp.Tree;
 using JetBrains.ReSharper.Psi.Tree;
 using JetBrains.TextControl;
 using JetBrains.Util;
+using ReSharperPlugin.LLMask.Data;
 using ReSharperPlugin.LLMask.Settings;
 
 namespace ReSharperPlugin.LLMask;
@@ -59,9 +60,13 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
         if (!settings.UseStringObfuscation && !settings.UsePsiObfuscation)
             return false;
 
+        var solutionRoot = element.GetSolution().SolutionFilePath.Directory.FullPath;
+        var config = string.IsNullOrWhiteSpace(settings.ConfigFilePath)
+            ? LLMaskDataProvider.Load(solutionRoot)
+            : LLMaskDataProvider.LoadFromFile(settings.ConfigFilePath);
+
         var existing  = ParseWhitelist(settings.CustomWhitelist);
-        var baseWords = ParseWhitelist(settings.BaseWhitelist);
-        var excluded  = new HashSet<string>(existing.Concat(baseWords), StringComparer.Ordinal);
+        var excluded  = new HashSet<string>(existing.Concat(config.BaseWhitelist), StringComparer.Ordinal);
 
         _newWords = CollectNewIdentifiers(psiFile, provider.DocumentSelection.TextRange, excluded);
         return _newWords.Count > 0;
