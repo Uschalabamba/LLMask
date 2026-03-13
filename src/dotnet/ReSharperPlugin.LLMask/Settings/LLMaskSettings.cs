@@ -1,6 +1,5 @@
 using JetBrains.Application.Settings;
 using JetBrains.Application.Settings.WellKnownRootKeys;
-using ReSharperPlugin.LLMask.Data;
 
 namespace ReSharperPlugin.LLMask.Settings;
 
@@ -27,9 +26,6 @@ public class LLMaskSettings
     [SettingsEntry("", "Comma-separated list of additional identifiers to preserve (not obfuscate)")]
     public string CustomWhitelist;
 
-    [SettingsEntry(CSharpIdentifierData.DefaultBaseWhitelist, "Comma-separated base list of identifiers to preserve (C# keywords and BCL types)")]
-    public string BaseWhitelist;
-
-    [SettingsEntry(CSharpIdentifierData.DefaultWellKnownNamespaceRoots, "Comma-separated list of well-known namespace root segments used for assembly-resolution auto-preservation")]
-    public string WellKnownNamespaceRoots;
+    [SettingsEntry("", "Absolute path to a custom llmask.json config file. Leave empty to use llmask.json in the solution root (falling back to built-in defaults if absent).")]
+    public string ConfigFilePath;
 }

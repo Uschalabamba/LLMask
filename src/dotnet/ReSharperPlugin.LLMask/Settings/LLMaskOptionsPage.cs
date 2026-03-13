@@ -13,7 +13,7 @@ namespace ReSharperPlugin.LLMask.Settings;
     ParentId = EnvironmentPage.Pid)]
 public class LLMaskOptionsPage : BeSimpleOptionsPage
 {
-    private const string PageId = "LLMask";
+    public const string PageId = "LLMask";
 
     public LLMaskOptionsPage(
         Lifetime lifetime,
@@ -30,12 +30,13 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
         AddBoolOption((LLMaskSettings s) => s.UseStringObfuscation, "Enable string-based obfuscation");
         AddStringOption((LLMaskSettings s) => s.CustomWhitelist, "Additional preserved identifiers (comma-separated)");
 
-        AddHeader("Base Whitelist");
-        AddCommentText("Warning: Editing these identifiers can have unforeseen consequences and may result in less readable obfuscated output.");
-        AddStringOption((LLMaskSettings s) => s.BaseWhitelist, "Base preserved identifiers (comma-separated)");
-
-        AddHeader("Well-Known Namespace Roots");
-        AddCommentText("Namespace root segments used by the assembly-resolution pass to auto-preserve identifiers from well-known libraries. Only takes effect when 'Auto-preserve identifiers from well-known assemblies' is enabled.");
-        AddStringOption((LLMaskSettings s) => s.WellKnownNamespaceRoots, "Well-known namespace roots (comma-separated)");
+        AddHeader("Config File");
+        AddCommentText(
+            "The base whitelist and well-known namespace roots are loaded from llmask.json at " +
+            "runtime. Place the file in your solution root to customize them. If absent, " +
+            "built-in defaults are used. The file can be committed to source control for " +
+            "per-team customization.");
+        AddStringOption((LLMaskSettings s) => s.ConfigFilePath,
+            "Custom config file path (absolute). Leave empty to use llmask.json in the solution root.");
     }
 }

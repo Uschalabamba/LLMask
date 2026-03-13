@@ -9,6 +9,7 @@ using JetBrains.ReSharper.Feature.Services.CSharp.ContextActions;
 using JetBrains.ReSharper.Psi.Tree;
 using JetBrains.TextControl;
 using JetBrains.Util;
+using ReSharperPlugin.LLMask.Data;
 using ReSharperPlugin.LLMask.Obfuscation;
 using ReSharperPlugin.LLMask.Settings;
 
@@ -56,19 +57,17 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
                 .Select(w => w.Trim())
                 .Where(w => w.Length > 0);
 
-        var baseWords = string.IsNullOrWhiteSpace(settings.BaseWhitelist)
-            ? null
-            : settings.BaseWhitelist
-                .Split(',')
-                .Select(w => w.Trim())
-                .Where(w => w.Length > 0);
+        var solutionRoot = solution.SolutionFilePath.Directory.FullPath;
+        var config = string.IsNullOrWhiteSpace(settings.ConfigFilePath)
+            ? LLMaskDataProvider.Load(solutionRoot)
+            : LLMaskDataProvider.LoadFromFile(settings.ConfigFilePath);
 
         var selectionRange = provider.DocumentSelection;
 
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);
-            var obfuscated   = StringBasedObfuscator.Obfuscate(selectedText, extraWords, baseWords);
+            var obfuscated   = StringBasedObfuscator.Obfuscate(selectedText, extraWords, config.BaseWhitelist);
             log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, copied to clipboard");
             System.Windows.Clipboard.SetText(obfuscated);
         };

@@ -12,6 +12,7 @@ using JetBrains.ReSharper.Psi.CSharp.Tree;
 using JetBrains.ReSharper.Psi.Files;
 using JetBrains.ReSharper.Resources.Shell;
 using JetBrains.Util;
+using ReSharperPlugin.LLMask.Data;
 using ReSharperPlugin.LLMask.Obfuscation;
 using ReSharperPlugin.LLMask.Settings;
 
@@ -58,10 +59,10 @@ public class LLMaskHost : IStartupActivity
 
             var extraWords = string.IsNullOrWhiteSpace(settings.CustomWhitelist) ? null
                 : settings.CustomWhitelist.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
-            var baseWords = string.IsNullOrWhiteSpace(settings.BaseWhitelist) ? null
-                : settings.BaseWhitelist.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
-            var wellKnownRoots = string.IsNullOrWhiteSpace(settings.WellKnownNamespaceRoots) ? null
-                : settings.WellKnownNamespaceRoots.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
+
+            var config = string.IsNullOrWhiteSpace(settings.ConfigFilePath)
+                ? LLMaskDataProvider.Load(solution.SolutionFilePath.Directory.FullPath)
+                : LLMaskDataProvider.LoadFromFile(settings.ConfigFilePath);
 
             using (ReadLockCookie.Create())
             {
@@ -76,7 +77,7 @@ public class LLMaskHost : IStartupActivity
                 var psiFile = projectFile?.ToSourceFile()?.GetPrimaryPsiFile() as ICSharpFile;
                 if (psiFile == null) return string.Empty;
 
-                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, baseWords, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, wellKnownRoots);
+                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, config.BaseWhitelist, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, config.WellKnownNamespaceRoots);
             }
         });
 #endif

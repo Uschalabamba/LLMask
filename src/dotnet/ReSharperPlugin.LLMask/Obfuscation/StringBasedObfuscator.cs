@@ -30,8 +30,8 @@ namespace ReSharperPlugin.LLMask.Obfuscation;
 /// </summary>
 public static class StringBasedObfuscator
 {
-    private static readonly HashSet<string> preservedWords =
-        new(CSharpIdentifierData.DefaultBaseWhitelist.Split(','), StringComparer.Ordinal);
+    private static readonly Lazy<HashSet<string>> preservedWords =
+        new(() => new HashSet<string>(LLMaskDataProvider.GetEmbedded().BaseWhitelist, StringComparer.Ordinal));
 
     private static readonly Regex tokenizer = new (
         // 1. Block comment (may span lines)
@@ -62,7 +62,7 @@ public static class StringBasedObfuscator
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
-            : preservedWords;
+            : preservedWords.Value;
 
         HashSet<string>? extra = null;
         if (extraPreservedWords != null)

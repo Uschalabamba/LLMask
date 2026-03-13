@@ -4,10 +4,12 @@ using JetBrains.ProjectModel;
 using JetBrains.ReSharper.Psi;
 using JetBrains.ReSharper.Psi.CSharp.Tree;
 using JetBrains.ReSharper.Psi.Files;
+using JetBrains.ReSharper.Psi.Tree;
 using JetBrains.ReSharper.Resources.Shell;
 using JetBrains.ReSharper.TestFramework;
 using NUnit.Framework;
 using ReSharperPlugin.LLMask.Obfuscation;
+using System;
 
 namespace ReSharperPlugin.LLMask.Tests.Obfuscation;
 
@@ -389,5 +391,258 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
         var output = ObfuscateFile("AssemblyResolution.cs");
         Assert.That(output, Does.Contain("SomeMethod"),
             "Proprietary method must be replaced with a 'SomeMethod' placeholder");
+    }
+
+    // ── Assembly resolution: type names (Fix 1 & Fix 2) ──────────────────────
+
+    [Test]
+    [Description("BCL type in base-class position must be preserved verbatim (Fix 2: IUserTypeUsage walk)")]
+    public void AssemblyResolution_BaseClassTypeName_IsPreservedWhenEnabled()
+    {
+        var output = ObfuscateFile("AssemblyResolutionTypeNames.cs");
+        Assert.That(output, Does.Contain("ApplicationException"),
+            "BCL type 'ApplicationException' in base-class position must appear verbatim");
+    }
+
+    [Test]
+    [Description("BCL type in base-class position must be obfuscated when assembly resolution is disabled")]
+    public void AssemblyResolution_BaseClassTypeName_IsObfuscatedWhenDisabled()
+    {
+        var output = ObfuscateFileWithOptions("AssemblyResolutionTypeNames.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Contain("ApplicationException"),
+            "'ApplicationException' must be replaced when assembly resolution is off");
+    }
+
+    [Test]
+    [Description("BCL type used as a return-type annotation and in a constructor call must be preserved verbatim (Fix 2: IUserTypeUsage walk)")]
+    public void AssemblyResolution_ConstructorAndReturnTypeTypeName_IsPreservedWhenEnabled()
+    {
+        var output = ObfuscateFile("AssemblyResolutionTypeNames.cs");
+        Assert.That(output, Does.Contain("FormatException"),
+            "BCL type 'FormatException' in return-type and constructor positions must appear verbatim");
+    }
+
+    [Test]
+    [Description("BCL type in constructor and return-type positions must be obfuscated when assembly resolution is disabled")]
+    public void AssemblyResolution_ConstructorAndReturnTypeTypeName_IsObfuscatedWhenDisabled()
+    {
+        var output = ObfuscateFileWithOptions("AssemblyResolutionTypeNames.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Contain("FormatException"),
+            "'FormatException' must be replaced when assembly resolution is off");
+    }
+
+    [Test]
+    [Description("BCL type used only as a static qualifier must be preserved verbatim (Fix 1: containing-type enrichment when resolving a member)")]
+    public void AssemblyResolution_StaticQualifierTypeName_IsPreservedWhenEnabled()
+    {
+        var output = ObfuscateFile("AssemblyResolutionTypeNames.cs");
+        Assert.That(output, Does.Contain("BitConverter"),
+            "BCL type 'BitConverter' used as a static qualifier must appear verbatim");
+        Assert.That(output, Does.Contain("GetBytes"),
+            "BCL member 'GetBytes' on 'BitConverter' must also appear verbatim");
+    }
+
+    [Test]
+    [Description("BCL static-qualifier type must be obfuscated when assembly resolution is disabled")]
+    public void AssemblyResolution_StaticQualifierTypeName_IsObfuscatedWhenDisabled()
+    {
+        var output = ObfuscateFileWithOptions("AssemblyResolutionTypeNames.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Contain("BitConverter"),
+            "'BitConverter' must be replaced when assembly resolution is off");
+    }
+
+    [Test]
+    [Description("Proprietary class and method names in the type-names test file must always be obfuscated")]
+    public void AssemblyResolution_ProprietaryNamesInTypeNamesFile_AreAlwaysObfuscated()
+    {
+        var output = ObfuscateFile("AssemblyResolutionTypeNames.cs");
+        Assert.That(output, Does.Not.Contain("ProprietaryCase"),
+            "Proprietary class 'ProprietaryCase' must be obfuscated");
+        Assert.That(output, Does.Not.Contain("ProprietaryMethod"),
+            "Proprietary method 'ProprietaryMethod' must be obfuscated");
+    }
+
+    // ── Object initialiser property names (Fix 3) ────────────────────────────
+
+    [Test]
+    [Description("BCL property names set in an object initialiser must be preserved verbatim (Fix 3: IPropertyInitializer walk)")]
+    public void ObjectInitializer_BclPropertyNames_PreservedWhenEnabled()
+    {
+        var output = ObfuscateFile("ObjectInitializer.cs");
+        // HelpLink and Source are properties of System.Exception (mscorlib).
+        // They are NOT in the base whitelist; only Fix 3 can preserve them.
+        Assert.That(output, Does.Contain("HelpLink"),
+            "BCL property 'HelpLink' (System.Exception) in an object initialiser must appear verbatim");
+        Assert.That(output, Does.Contain("Source"),
+            "BCL property 'Source' (System.Exception) in an object initialiser must appear verbatim");
+    }
+
+    [Test]
+    [Description("BCL property names in object initialisers must be obfuscated when assembly resolution is disabled")]
+    public void ObjectInitializer_BclPropertyNames_ObfuscatedWhenDisabled()
+    {
+        var output = ObfuscateFileWithOptions("ObjectInitializer.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Contain("HelpLink"),
+            "'HelpLink' must be replaced when assembly resolution is off");
+        Assert.That(output, Does.Not.Contain("Source"),
+            "'Source' must be replaced when assembly resolution is off");
+    }
+
+    [Test]
+    [Description("Proprietary property names in an object initialiser must always be obfuscated, even with assembly resolution enabled")]
+    public void ObjectInitializer_ProprietaryPropertyNames_AlwaysObfuscated()
+    {
+        var output = ObfuscateFile("ObjectInitializer.cs");
+        // Width, Height, Label are declared on ProprietaryWidget — a local class with
+        // no well-known namespace. Fix 3 must not accidentally preserve them.
+        Assert.That(output, Does.Not.Contain("Width"),
+            "Proprietary property 'Width' must be obfuscated");
+        Assert.That(output, Does.Not.Contain("Height"),
+            "Proprietary property 'Height' must be obfuscated");
+        Assert.That(output, Does.Not.Contain("Label"),
+            "Proprietary property 'Label' must be obfuscated");
+    }
+
+    // ── Interpolated string obfuscation ──────────────────────────────────────
+
+    [Test]
+    public void InterpolatedString_StructuralDelimiters_Preserved()
+    {
+        // The output must start with "$" and be syntactically valid C#.
+        var output = ObfuscateFile("InterpolatedString.cs");
+        Assert.That(output, Does.Contain("$\""),
+            "Interpolated string prefix $\" must be preserved");
+    }
+
+    [Test]
+    public void InterpolatedString_ShortTextFragments_KeptVerbatim()
+    {
+        // "r" and "c" are single-char text fragments → not replaced.
+        // "x=" and "y=" are two chars — the "=" is punctuation, but "x" and "y"
+        // are the only letter, so non-ws count = 2 → they ARE replaced.
+        // The single chars "r" and "c" between $" and { must survive.
+        var output = ObfuscateFile("InterpolatedString.cs");
+        // $"r{…} c{…}" should preserve the "r" and " c" fragments
+        Assert.That(output, Does.Contain("$\"r{"),
+            "Single-char text fragment 'r' at the start must be kept verbatim");
+        Assert.That(output, Does.Contain("} c{"),
+            "Single-char text fragment ' c' in the middle must be kept verbatim");
+    }
+
+    [Test]
+    public void InterpolatedString_LongTextFragments_Obfuscated()
+    {
+        // "hello " is a multi-char text fragment → replaced with someStringN.
+        var output = ObfuscateFile("InterpolatedString.cs");
+        Assert.That(output, Does.Not.Contain("hello"),
+            "Multi-char text fragment 'hello' must be obfuscated");
+        Assert.That(output, Does.Contain("someString"),
+            "Obfuscated text fragment must produce a someStringN placeholder");
+    }
+
+    [Test]
+    public void InterpolatedString_EmptyTextFragment_ProducesNoPlaceholder()
+    {
+        // $"{row}" has an empty text fragment → no someStringN generated there.
+        var output = ObfuscateFile("InterpolatedString.cs");
+        // The obfuscated row variable will appear; the string should just be $"{…}"
+        Assert.That(output, Does.Contain("$\"{"),
+            "Empty-text interpolated string must keep $\"{ delimiter");
+    }
+
+    [Test]
+    public void InterpolatedString_OutputIsSyntacticallyCoherent()
+    {
+        // In the old broken output, interpolated string parts were each replaced
+        // wholesale with "someStringN", producing sequences like:
+        //   "someString4"localVar3 + 1"someString5"
+        // where closing quote of one placeholder is immediately followed by an
+        // identifier — syntactically a string literal concatenated with nothing.
+        // After the fix each part is emitted as $"<text>{ … }<text>{ … }<text>"
+        // so we should never see a plain string-placeholder followed immediately
+        // by a lowercase identifier (the telltale broken-interpolation signature).
+        var output = ObfuscateFile("InterpolatedString.cs");
+        Assert.That(output, Does.Not.Match(@"someString\d+""\w"),
+            "Old broken pattern: someStringN\"identifier must not appear in output");
+    }
+
+    // ── Diagnostic ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Dumps the full PSI tree for ObjectInitializerDiag.cs to the test output.
+    /// Run this test and inspect the console output to discover the concrete and
+    /// interface node types that represent property names inside object initialisers
+    /// (e.g. the "Width" in <c>new DiagWidget { Width = 100 }</c>).
+    /// This test always passes — it is a one-off inspection aid.
+    /// </summary>
+    [Test]
+    [Explicit("Diagnostic only — run manually to inspect PSI node types")]
+    public void Diagnostic_ObjectInitializer_PsiTreeDump()
+    {
+        WithSingleProject("ObjectInitializerDiag.cs", (_, _, project) =>
+        {
+            using (ReadLockCookie.Create())
+            {
+                var psiFile = project.GetSubItems()
+                    .OfType<IProjectFile>()
+                    .Single()
+                    .ToSourceFile()!
+                    .GetPrimaryPsiFile() as ICSharpFile;
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("=== Full PSI tree ===");
+                sb.AppendLine();
+
+                foreach (var node in psiFile!.Descendants())
+                {
+                    // Compute indentation depth.
+                    var depth = 0;
+                    for (var p = node.Parent; p != null; p = p.Parent) depth++;
+
+                    var indent   = new string(' ', depth * 2);
+                    var concrete = node.GetType().Name;
+
+                    // Collect implemented PSI interfaces (the ones we pattern-match on).
+                    var ifaces = string.Join(", ", node.GetType()
+                        .GetInterfaces()
+                        .Where(i => i.Namespace?.StartsWith("JetBrains.ReSharper.Psi") == true
+                                 || i.Namespace?.StartsWith("JetBrains.ReSharper.Psi.CSharp") == true)
+                        .Select(i => i.Name)
+                        .OrderBy(n => n));
+
+                    var tokenText = node is ITokenNode tk
+                        ? $"  \"{tk.GetText().Trim()}\""
+                        : string.Empty;
+
+                    sb.AppendLine($"{indent}[{concrete}]{tokenText}");
+                    if (!string.IsNullOrEmpty(ifaces))
+                        sb.AppendLine($"{indent}  implements: {ifaces}");
+                }
+
+                // ── Reflection: show all gettable properties of the first IPropertyInitializer ──
+        sb.AppendLine();
+        sb.AppendLine("=== IPropertyInitializer reflection (first instance) ===");
+        var firstPropInit = psiFile!.Descendants<IPropertyInitializer>().FirstOrDefault();
+        if (firstPropInit != null)
+        {
+            foreach (var iface in firstPropInit.GetType().GetInterfaces()
+                         .OrderBy(i => i.Name))
+            {
+                foreach (var prop in iface.GetProperties()
+                             .OrderBy(p => p.Name))
+                {
+                    string valStr;
+                    try { valStr = prop.GetValue(firstPropInit)?.ToString() ?? "<null>"; }
+                    catch (Exception ex) { valStr = $"<{ex.GetType().Name}>"; }
+                    sb.AppendLine($"  [{iface.Name}].{prop.Name} = {valStr}");
+                }
+            }
+        }
+
+        Console.WriteLine(sb.ToString());
+            }
+        });
+
+        Assert.Pass("Diagnostic — inspect the test output for PSI node types.");
     }
 }
