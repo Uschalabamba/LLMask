@@ -21,9 +21,15 @@ public class LLMaskSettings
     [SettingsEntry(true, "Sort obfuscated identifiers by usage frequency so the most-used names get the lowest numbers")]
     public bool UsePsiFrequencySorting;
 
+    [SettingsEntry(true, "Use PSI reference resolution to automatically preserve identifiers from well-known assemblies (System.*, Serilog, Newtonsoft, etc.) without manual whitelist maintenance")]
+    public bool UseAssemblyResolution;
+
     [SettingsEntry("", "Comma-separated list of additional identifiers to preserve (not obfuscate)")]
     public string CustomWhitelist;
 
     [SettingsEntry(CSharpIdentifierData.DefaultBaseWhitelist, "Comma-separated base list of identifiers to preserve (C# keywords and BCL types)")]
     public string BaseWhitelist;
+
+    [SettingsEntry(CSharpIdentifierData.DefaultWellKnownNamespaceRoots, "Comma-separated list of well-known namespace root segments used for assembly-resolution auto-preservation")]
+    public string WellKnownNamespaceRoots;
 }

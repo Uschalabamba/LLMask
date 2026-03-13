@@ -45,7 +45,13 @@
       "Bash(find C:Userspaulo.nugetpackagesjetbrains.resharper.sdk -name *.dll)",
       "Bash(find /c/Users/paulo/RiderProjects/LLMask -name *.dll)",
       "Bash(find /c/Users/paulo/AppData -name *.xml)",
-      "Bash(find /c/Users/paulo/AppData/Local/JetBrains -name JetBrains.Application.*.dll)"
+      "Bash(find /c/Users/paulo/AppData/Local/JetBrains -name JetBrains.Application.*.dll)",
+      "Bash(find /c/Users/paulo/RiderProjects/LLMask/packages -name *.xml -type f)",
+      "Bash(find /c/Users/paulo/RiderProjects/LLMask -name JetBrains.ReSharper.Psi*.dll -o -name JetBrains.ReSharper.Psi*.xml)",
+      "Bash(grep -E \"\\\\.xml$\")",
+      "WebFetch(domain:www.nuget.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:nugetmusthaves.com)"
     ]
   }
 }

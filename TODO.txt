@@ -12,6 +12,5 @@ Approach-unspecific features like:
 
 
 current:
-check types and methods against available public assemblies as toggle
 reuse replacement names/numbers when old ones go out of scope (maybe only for indexers/identifiers)
 change whitelists to json config files with links in the settings menu instead of raw list.

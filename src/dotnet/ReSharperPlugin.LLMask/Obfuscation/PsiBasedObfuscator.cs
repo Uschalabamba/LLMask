@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using JetBrains.ReSharper.Psi;
 using JetBrains.ReSharper.Psi.CSharp.Parsing;
 using JetBrains.ReSharper.Psi.CSharp.Tree;
 using JetBrains.ReSharper.Psi.Tree;
@@ -41,7 +42,9 @@ public static class PsiBasedObfuscator
         ICSharpFile file,
         IEnumerable<string>? extraPreservedWords = null,
         IEnumerable<string>? basePreservedWords = null,
-        bool sortByFrequency = true)
+        bool sortByFrequency = true,
+        bool useAssemblyResolution = true,
+        IEnumerable<string>? wellKnownRoots = null)
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
@@ -52,6 +55,10 @@ public static class PsiBasedObfuscator
         {
             extra = new HashSet<string>(extraPreservedWords, StringComparer.Ordinal);
         }
+
+        var wellKnownRootsSet = wellKnownRoots != null
+            ? new HashSet<string>(wellKnownRoots, StringComparer.Ordinal)
+            : CSharpIdentifierData.WellKnownNamespaceRoots;
 
         var strCounters = new int[3]; // [0] str  [1] path  [2] url
         var strMap = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -156,6 +163,92 @@ public static class PsiBasedObfuscator
             }
         }
 
+        // ── Pass 1c: resolve references to well-known assemblies ─────────────
+        // Walk every IReferenceExpression; resolve it; if the declared element's
+        // owning module is an IAssemblyPsiModule whose name starts with a
+        // well-known namespace root, add the identifier text to resolvedSafeNames
+        // so it will pass through verbatim in Pass 2 (and be excluded from the
+        // placeholder assignment pools above).
+        var resolvedSafeNames = new HashSet<string>(StringComparer.Ordinal);
+        if (useAssemblyResolution)
+        {
+            foreach (var refExpr in file.Descendants<IReferenceExpression>())
+            {
+                var nameToken = refExpr.NameIdentifier;
+                if (nameToken == null)
+                {
+                    continue;
+                }
+
+                var name = nameToken.Name;
+                if (string.IsNullOrEmpty(name) || name.Length <= 1)
+                {
+                    continue;
+                }
+
+                // Already preserved by whitelist — no need to pay the resolve cost.
+                if (baseWords.Contains(name) || (extra != null && extra.Contains(name)))
+                {
+                    continue;
+                }
+
+                var resolveResult = refExpr.Reference.Resolve();
+                var element = resolveResult.DeclaredElement;
+
+                // Primary path: element resolved cleanly — navigate to its containing type.
+                ITypeElement? containingType = null;
+                if (element != null)
+                {
+                    containingType = element is ITypeMember tm
+                        ? tm.ContainingType
+                        : element as ITypeElement;
+                }
+
+                // Fallback A: qualifier is a type reference (static call, e.g. Console.WriteLine).
+                // Handles overloaded methods where DeclaredElement is null due to ambiguity.
+                if (containingType == null &&
+                    refExpr.QualifierExpression is IReferenceExpression qualRefExpr)
+                {
+                    containingType = qualRefExpr.Reference.Resolve().DeclaredElement as ITypeElement;
+                }
+
+                // Fallback B: qualifier is a value expression (instance / extension call).
+                // Get the expression's declared type to find the receiver's namespace.
+                if (containingType == null && refExpr.QualifierExpression is { } qualExpr)
+                {
+                    containingType = (qualExpr.GetExpressionType() as IDeclaredType)?.GetTypeElement();
+                }
+
+                if (containingType == null)
+                {
+                    continue;
+                }
+
+                // GetClrName().FullName gives "System.String", "System.Linq.Enumerable", etc.
+                // Splitting on the first dot gives us the root namespace segment.
+                var fullTypeName = containingType.GetClrName().FullName;
+                var firstDot = fullTypeName.IndexOf('.');
+                if (firstDot <= 0)
+                {
+                    continue;
+                }
+
+                var nsRoot = fullTypeName.Substring(0, firstDot);
+                if (wellKnownRootsSet.Contains(nsRoot))
+                {
+                    resolvedSafeNames.Add(name);
+                }
+            }
+        }
+
+        // Remove assembly-resolved names from the placeholder pools so they are
+        // never assigned a placeholder (they will pass through verbatim in Pass 2).
+        foreach (var name in resolvedSafeNames)
+        {
+            declaredPrefix.Remove(name);
+            externalPrefix.Remove(name);
+        }
+
         // ── Assign numbers ────────────────────────────────────────────────────
         // When sortByFrequency: merge declared + external, sort each prefix group
         // by descending frequency, then assign 1, 2, 3 …
@@ -203,7 +296,7 @@ public static class PsiBasedObfuscator
         foreach (var directive in file.Descendants<IUsingDirective>())
         {
             string replacement;
-            if (IsWellKnownUsing(directive))
+            if (IsWellKnownUsing(directive, wellKnownRootsSet))
             {
                 var buf = new StringBuilder();
                 foreach (var t in directive.Descendants<ITokenNode>())
@@ -269,7 +362,8 @@ public static class PsiBasedObfuscator
             }
             else if (tokenType == CSharpTokenType.IDENTIFIER)
             {
-                if (baseWords.Contains(raw) || (extra != null && extra.Contains(raw)))
+                if (resolvedSafeNames.Contains(raw)
+                    || baseWords.Contains(raw) || (extra != null && extra.Contains(raw)))
                 {
                     sb.Append(raw);
                 }
@@ -481,7 +575,7 @@ public static class PsiBasedObfuscator
     /// Returns true when the directive's root namespace segment is well-known
     /// (e.g. System, Serilog, Xunit) and its text can be emitted verbatim.
     /// Only plain namespace directives are checked; alias directives are always replaced.
-    private static bool IsWellKnownUsing(IUsingDirective directive)
+    private static bool IsWellKnownUsing(IUsingDirective directive, HashSet<string> roots)
     {
         // Alias directives (using Alias = Foo.Bar) are always replaced.
         if (directive is IUsingAliasDirective)
@@ -513,7 +607,7 @@ public static class PsiBasedObfuscator
                 continue;
             }
 
-            return CSharpIdentifierData.WellKnownNamespaceRoots.Contains(root);
+            return roots.Contains(root);
         }
 
         return false;

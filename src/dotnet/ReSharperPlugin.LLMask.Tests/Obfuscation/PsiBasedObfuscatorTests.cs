@@ -28,7 +28,13 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
     /// Opens <paramref name="fileName"/> (relative to RelativeTestDataPath) as a
     /// single-project solution, obfuscates it, and returns the result string.
     /// </summary>
-    private string ObfuscateFile(string fileName)
+    private string ObfuscateFile(string fileName) =>
+        ObfuscateFileWithOptions(fileName);
+
+    private string ObfuscateFileWithOptions(
+        string fileName,
+        bool sortByFrequency = true,
+        bool useAssemblyResolution = true)
     {
         var result = string.Empty;
 
@@ -44,7 +50,10 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
                     .ToSourceFile()!
                     .GetPrimaryPsiFile() as ICSharpFile;
 
-                result = PsiBasedObfuscator.Obfuscate(psiFile!);
+                result = PsiBasedObfuscator.Obfuscate(
+                    psiFile!,
+                    sortByFrequency: sortByFrequency,
+                    useAssemblyResolution: useAssemblyResolution);
             }
         });
 
@@ -334,5 +343,51 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
             System.StringSplitOptions.None).Length - 1;
         Assert.That(genericCount, Is.EqualTo(1));
         Assert.That(linqCount, Is.EqualTo(1));
+    }
+
+    // ── Assembly resolution ───────────────────────────────────────────────────
+
+    [Test]
+    [Description("A proprietary method must always be obfuscated, regardless of the assembly-resolution setting")]
+    public void AssemblyResolution_CustomMethod_IsAlwaysObfuscated()
+    {
+        var output = ObfuscateFile("AssemblyResolution.cs");
+        Assert.That(output, Does.Not.Contain("ProcessItems"),
+            "Proprietary method 'ProcessItems' must be replaced with a placeholder");
+    }
+
+    [Test]
+    [Description("BCL method names must appear verbatim when assembly resolution is enabled (the default)")]
+    public void AssemblyResolution_BclMethodNames_ArePreservedWhenEnabled()
+    {
+        var output = ObfuscateFile("AssemblyResolution.cs"); // useAssemblyResolution = true (default)
+        Assert.That(output, Does.Contain("IsNullOrEmpty"),
+            "BCL method 'string.IsNullOrEmpty' must be preserved verbatim");
+        Assert.That(output, Does.Contain("WriteLine"),
+            "BCL method 'Console.WriteLine' must be preserved verbatim");
+        Assert.That(output, Does.Contain("ToUpper"),
+            "BCL method 'string.ToUpper' must be preserved verbatim");
+    }
+
+    [Test]
+    [Description("BCL method names must be obfuscated when assembly resolution is disabled")]
+    public void AssemblyResolution_BclMethodNames_AreObfuscatedWhenDisabled()
+    {
+        var output = ObfuscateFileWithOptions("AssemblyResolution.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Contain("IsNullOrEmpty"),
+            "BCL method 'IsNullOrEmpty' must be replaced when assembly resolution is off");
+        Assert.That(output, Does.Not.Contain("WriteLine"),
+            "BCL method 'WriteLine' must be replaced when assembly resolution is off");
+        Assert.That(output, Does.Not.Contain("ToUpper"),
+            "BCL method 'ToUpper' must be replaced when assembly resolution is off");
+    }
+
+    [Test]
+    [Description("Assembly resolution must not affect how proprietary names are obfuscated — they must still get consistent placeholders")]
+    public void AssemblyResolution_CustomMethod_GetsPlaceholderNotVerbatim()
+    {
+        var output = ObfuscateFile("AssemblyResolution.cs");
+        Assert.That(output, Does.Contain("SomeMethod"),
+            "Proprietary method must be replaced with a 'SomeMethod' placeholder");
     }
 }
