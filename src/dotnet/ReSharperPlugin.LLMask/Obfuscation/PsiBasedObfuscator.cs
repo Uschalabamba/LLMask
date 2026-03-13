@@ -88,6 +88,9 @@ public static class PsiBasedObfuscator
         // Only the first occurrence per name is kept (partial classes etc. may
         // declare the same name more than once).
         var declaredPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Tracks which abbreviation (e.g. "tb") has been claimed by which type short
+        // name (e.g. "TextBox") for two-level collision resolution.
+        var abbrToType = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var decl in file.Descendants<ICSharpDeclaration>())
         {
             var name = decl.DeclaredName;
@@ -121,6 +124,18 @@ public static class PsiBasedObfuscator
             if (name.Length == 1 && prefix is "localVar" or "param")
             {
                 continue;
+            }
+
+            // For local variables of well-known BCL/framework types, derive a short
+            // prefix from the type's CamelCase initials (e.g. TextBox → "tb",
+            // Random → "r") so the output reads "tb1" instead of "localVar17".
+            // Proprietary-type locals are intentionally excluded — revealing initials
+            // would partially leak the type name.
+            if (prefix == "localVar" && useAssemblyResolution && decl is ILocalVariableDeclaration localDecl)
+            {
+                var abbr = TryGetTypeAbbreviationPrefix(localDecl, wellKnownRootsSet, abbrToType);
+                if (abbr != null)
+                    prefix = abbr;
             }
 
             declaredPrefix[name] = prefix;
@@ -730,6 +745,99 @@ public static class PsiBasedObfuscator
             }
         }
         return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Type-abbreviation prefix derivation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Attempts to derive a short prefix from the declared type of a local variable.
+    /// Returns <c>null</c> when the type is not from a well-known namespace (i.e. the
+    /// variable should keep the generic <c>localVar</c> prefix).
+    /// </summary>
+    private static string? TryGetTypeAbbreviationPrefix(
+        ILocalVariableDeclaration decl,
+        HashSet<string> wellKnownRoots,
+        Dictionary<string, string> abbrToType)
+    {
+        // Works for both explicit types and var-inferred types.
+        if (decl.DeclaredElement is not ILocalVariable localVar) return null;
+        // Skip non-named types (arrays, pointers, type parameters, …).
+        if (localVar.Type is not IDeclaredType declaredType) return null;
+
+        var typeElement = declaredType.GetTypeElement();
+        if (typeElement == null) return null;
+
+        var fullName = typeElement.GetClrName().FullName;
+        var firstDot = fullName.IndexOf('.');
+        if (firstDot <= 0) return null;                                        // no namespace
+        if (!wellKnownRoots.Contains(fullName.Substring(0, firstDot))) return null; // proprietary
+
+        // ShortName strips generic arity suffix: "List`1" → "List", "Dictionary`2" → "Dictionary"
+        var shortName = typeElement.GetClrName().ShortName;
+        if (string.IsNullOrEmpty(shortName)) return null;
+
+        return ResolveAbbreviation(shortName, abbrToType);
+    }
+
+    /// <summary>
+    /// Returns the abbreviation to use as a placeholder prefix for variables of the
+    /// given type short name, handling collisions via a two-level escalation:
+    /// <list type="bullet">
+    ///   <item>Level 1 — uppercase letters only: <c>TextBox</c> → <c>tb</c></item>
+    ///   <item>Level 2 — uppercase + next char (if level 1 is taken by a different type):
+    ///         <c>TextBox</c> → <c>tebo</c>, <c>TableBrowser</c> → <c>tabr</c></item>
+    /// </list>
+    /// </summary>
+    private static string ResolveAbbreviation(string shortName, Dictionary<string, string> abbrToType)
+    {
+        var level1 = ExtractInitials(shortName);
+        // Require at least 2 characters so single-component type names (Int32 → "i",
+        // List → "l", Random → "r") don't get abbreviated — they'd produce noisy
+        // single-letter prefixes indistinguishable from loop counters or local chars.
+        if (level1.Length < 2) return "localVar";
+
+        if (!abbrToType.TryGetValue(level1, out var owner) || owner == shortName)
+        {
+            abbrToType[level1] = shortName;
+            return level1;
+        }
+
+        // Level 1 already claimed by a different type — escalate.
+        var level2 = ExtractInitialsWithNext(shortName);
+        if (level2.Length == 0) return "localVar";
+        abbrToType[level2] = shortName; // no further collision handling needed
+        return level2;
+    }
+
+    /// <summary>Extracts lowercase uppercase-letter initials: <c>TextBox</c> → <c>tb</c>.</summary>
+    private static string ExtractInitials(string name)
+    {
+        var sb = new StringBuilder();
+        foreach (var c in name)
+        {
+            if (char.IsUpper(c))
+                sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Extracts initials with the following character for collision resolution:
+    /// <c>TextBox</c> → <c>tebo</c>, <c>TableBrowser</c> → <c>tabr</c>.
+    /// </summary>
+    private static string ExtractInitialsWithNext(string name)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (!char.IsUpper(name[i])) continue;
+            sb.Append(char.ToLowerInvariant(name[i]));
+            if (i + 1 < name.Length && !char.IsUpper(name[i + 1]))
+                sb.Append(name[i + 1]);
+        }
+        return sb.ToString();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

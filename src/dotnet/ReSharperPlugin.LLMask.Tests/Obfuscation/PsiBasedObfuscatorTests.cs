@@ -503,6 +503,54 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
             "Proprietary property 'Label' must be obfuscated");
     }
 
+    // ── Type-abbreviation prefixes for local variables ───────────────────────
+
+    [Test]
+    public void TypeAbbreviation_StringBuilder_GetsInitialsPrefix()
+    {
+        var output = ObfuscateFile("TypeAbbreviation.cs");
+        Assert.That(output, Does.Contain("sb1"),
+            "First StringBuilder variable should receive prefix 'sb1'");
+    }
+
+    [Test]
+    public void TypeAbbreviation_ArgumentException_GetsInitialsPrefix()
+    {
+        var output = ObfuscateFile("TypeAbbreviation.cs");
+        Assert.That(output, Does.Contain("ae1"),
+            "First ArgumentException variable should receive prefix 'ae1'");
+    }
+
+    [Test]
+    public void TypeAbbreviation_SameType_SharesPrefixPool()
+    {
+        var output = ObfuscateFile("TypeAbbreviation.cs");
+        Assert.That(output, Does.Contain("ae2"),
+            "Second ArgumentException variable should receive 'ae2' (same prefix pool)");
+        Assert.That(output, Does.Contain("sb2"),
+            "Second StringBuilder variable should receive 'sb2' (same prefix pool)");
+    }
+
+    [Test]
+    public void TypeAbbreviation_ProprietaryType_KeepsLocalVarPrefix()
+    {
+        var output = ObfuscateFile("TypeAbbreviation.cs");
+        Assert.That(output, Does.Contain("localVar"),
+            "Variable of proprietary type must keep the generic 'localVar' prefix");
+    }
+
+    [Test]
+    public void TypeAbbreviation_WhenDisabled_AllLocalsGetLocalVarPrefix()
+    {
+        var output = ObfuscateFileWithOptions("TypeAbbreviation.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Match(@"\bsb1\b"),
+            "With assembly resolution disabled no 'sb' prefix should appear");
+        Assert.That(output, Does.Not.Match(@"\bae1\b"),
+            "With assembly resolution disabled no 'ae' prefix should appear");
+        Assert.That(output, Does.Contain("localVar"),
+            "With assembly resolution disabled all locals should get the generic localVar prefix");
+    }
+
     // ── Interpolated string obfuscation ──────────────────────────────────────
 
     [Test]
