@@ -71,25 +71,47 @@ public static class CSharpIdentifierData
         // Common attribute names used without the 'Attribute' suffix
         "Flags,NonSerialized,Obsolete,Serializable,ThreadStatic";
     
+    /// <summary>
+    /// Comma-separated list of well-known namespace root segments.
+    /// Used as the default value for the <c>WellKnownNamespaceRoots</c> setting.
+    /// </summary>
+    public const string DefaultWellKnownNamespaceRoots =
+        "System,Microsoft,Windows," +
+        "Serilog,NLog,log4net," +
+        "Xunit,NUnit,MSTest," +
+        "FluentAssertions,Shouldly," +
+        "Moq,NSubstitute,FakeItEasy," +
+        "AutoFixture,Bogus," +
+        "WireMock,Testcontainers," +
+        "Verify," +
+        "Swashbuckle,Grpc,RestSharp,Refit,Flurl," +
+        "Newtonsoft,MessagePack,ProtoBuf,YamlDotNet," +
+        "Dapper,LinqToDB,Marten," +
+        "Npgsql,MongoDB,Elasticsearch,Elastic,Cassandra,Couchbase,LiteDB,RavenDB,MySql," +
+        "StackExchange," +
+        "RabbitMQ,MassTransit,Confluent,MediatR,Wolverine,NATS,NetMQ," +
+        "Autofac,Castle,Ninject,SimpleInjector,Scrutor,Lamar,DryIoc," +
+        "AutoMapper,Mapster,Riok," +
+        "FluentValidation," +
+        "Polly," +
+        "Hangfire,Quartz,Coravel," +
+        "Azure,Amazon,Google," +
+        "OpenTelemetry,Sentry,Prometheus,App," +
+        "OfficeOpenXml,ClosedXML,DocumentFormat,NPOI," +
+        "CsvHelper,HtmlAgilityPack,AngleSharp," +
+        "SixLabors,ImageMagick,SkiaSharp,OxyPlot," +
+        "NodaTime," +
+        "LanguageExt,OneOf,CSharpFunctionalExtensions," +
+        "Humanizer,Spectre," +
+        "MailKit,MimeKit,SendGrid," +
+        "Twilio,Stripe," +
+        "Akka,Proto,ReactiveUI," +
+        "Avalonia,CommunityToolkit,Prism";
+
     // Root namespace segments whose using directives are preserved verbatim
     // because they don't reveal proprietary information.
-    internal static readonly HashSet<string> WellKnownNamespaceRoots = new(StringComparer.Ordinal)
-    {
-        // BCL / runtime
-        "System", "Microsoft", "Windows",
-        // Logging
-        "Serilog", "NLog", "log4net",
-        // Testing
-        "Xunit", "NUnit", "MSTest", "FluentAssertions", "Shouldly", "Moq", "AutoFixture", "Bogus",
-        // Web / API
-        "Swashbuckle", "Grpc",
-        // Data
-        "Newtonsoft", "Dapper", "StackExchange",
-        // Messaging
-        "RabbitMQ", "MassTransit",
-        // Utilities
-        "AutoMapper", "FluentValidation", "MediatR", "Polly",
-        // Cloud
-        "Azure", "Amazon", "Google",
-    };
+    // Assembly-resolution (Pass 1c) also uses this set to decide whether a
+    // resolved identifier belongs to a well-known library and should be kept.
+    internal static readonly HashSet<string> WellKnownNamespaceRoots =
+        new(DefaultWellKnownNamespaceRoots.Split(','), StringComparer.Ordinal);
 }

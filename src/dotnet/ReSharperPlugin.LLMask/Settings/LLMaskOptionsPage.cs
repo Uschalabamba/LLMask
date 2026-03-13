@@ -23,6 +23,8 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
     {
         AddHeader("PSI-Based Obfuscation (full file)");
         AddBoolOption((LLMaskSettings s) => s.UsePsiObfuscation, "Enable PSI-based obfuscation (right-click a .cs file → LLMask: Obfuscate file)");
+        AddBoolOption((LLMaskSettings s) => s.UsePsiFrequencySorting, "Sort identifiers by frequency (most-used names get the lowest numbers, e.g. SomeMethod1)");
+        AddBoolOption((LLMaskSettings s) => s.UseAssemblyResolution, "Auto-preserve identifiers from well-known assemblies (System.*, Serilog, Newtonsoft, …) without manual whitelist entries");
 
         AddHeader("String-Based Obfuscation (selection)");
         AddBoolOption((LLMaskSettings s) => s.UseStringObfuscation, "Enable string-based obfuscation");
@@ -31,5 +33,9 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
         AddHeader("Base Whitelist");
         AddCommentText("Warning: Editing these identifiers can have unforeseen consequences and may result in less readable obfuscated output.");
         AddStringOption((LLMaskSettings s) => s.BaseWhitelist, "Base preserved identifiers (comma-separated)");
+
+        AddHeader("Well-Known Namespace Roots");
+        AddCommentText("Namespace root segments used by the assembly-resolution pass to auto-preserve identifiers from well-known libraries. Only takes effect when 'Auto-preserve identifiers from well-known assemblies' is enabled.");
+        AddStringOption((LLMaskSettings s) => s.WellKnownNamespaceRoots, "Well-known namespace roots (comma-separated)");
     }
 }

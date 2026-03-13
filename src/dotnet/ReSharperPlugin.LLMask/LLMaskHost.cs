@@ -60,6 +60,8 @@ public class LLMaskHost : IStartupActivity
                 : settings.CustomWhitelist.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
             var baseWords = string.IsNullOrWhiteSpace(settings.BaseWhitelist) ? null
                 : settings.BaseWhitelist.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
+            var wellKnownRoots = string.IsNullOrWhiteSpace(settings.WellKnownNamespaceRoots) ? null
+                : settings.WellKnownNamespaceRoots.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
 
             using (ReadLockCookie.Create())
             {
@@ -74,7 +76,7 @@ public class LLMaskHost : IStartupActivity
                 var psiFile = projectFile?.ToSourceFile()?.GetPrimaryPsiFile() as ICSharpFile;
                 if (psiFile == null) return string.Empty;
 
-                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, baseWords);
+                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, baseWords, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, wellKnownRoots);
             }
         });
 #endif

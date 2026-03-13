@@ -28,7 +28,13 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
     /// Opens <paramref name="fileName"/> (relative to RelativeTestDataPath) as a
     /// single-project solution, obfuscates it, and returns the result string.
     /// </summary>
-    private string ObfuscateFile(string fileName)
+    private string ObfuscateFile(string fileName) =>
+        ObfuscateFileWithOptions(fileName);
+
+    private string ObfuscateFileWithOptions(
+        string fileName,
+        bool sortByFrequency = true,
+        bool useAssemblyResolution = true)
     {
         var result = string.Empty;
 
@@ -44,11 +50,41 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
                     .ToSourceFile()!
                     .GetPrimaryPsiFile() as ICSharpFile;
 
-                result = PsiBasedObfuscator.Obfuscate(psiFile!);
+                result = PsiBasedObfuscator.Obfuscate(
+                    psiFile!,
+                    sortByFrequency: sortByFrequency,
+                    useAssemblyResolution: useAssemblyResolution);
             }
         });
 
         return result;
+    }
+
+    // ── Frequency ordering ────────────────────────────────────────────────────
+
+    [Test]
+    [Description("A method declared later in the file but called more often must get a lower placeholder number")]
+    public void FrequencyOrdering_MoreFrequentMethod_GetsLowerNumber()
+    {
+        var output = ObfuscateFile("FrequencyOrdering.cs");
+        // 'Common' is called 5 times, 'Rare' only once.
+        // Despite 'Rare' being declared first, 'Common' must get SomeMethod1.
+        Assert.That(output, Does.Contain("SomeMethod1()").And.Not.Contain("SomeMethod1\n"),
+            "'Common' (5 calls) must be assigned SomeMethod1");
+        Assert.That(output, Does.Contain("SomeMethod2()"),
+            "'Rare' (1 call) must be assigned SomeMethod2");
+    }
+
+    [Test]
+    [Description("The less-frequent method declared first must not 'steal' the SomeMethod1 slot")]
+    public void FrequencyOrdering_LessFrequentMethod_DoesNotGetLowestNumber()
+    {
+        var output = ObfuscateFile("FrequencyOrdering.cs");
+        // 'Rare' must not be SomeMethod1 — that belongs to the most-used method.
+        var rareCount = output.Split(["SomeMethod1"], System.StringSplitOptions.None).Length - 1;
+        // SomeMethod1 appears: 1 declaration + 5 call sites = 6 times (for 'Common')
+        Assert.That(rareCount, Is.GreaterThan(1),
+            "SomeMethod1 should appear multiple times because it maps to the heavily-used 'Common'");
     }
 
     // ── For loop ──────────────────────────────────────────────────────────────
@@ -230,6 +266,48 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
             "The '/*' token itself must be dropped — block comments are removed, not replaced");
     }
 
+    // ── Single-character literals ─────────────────────────────────────────────
+
+    [Test]
+    [Description("Char literals must always pass through verbatim")]
+    public void SingleCharLiterals_CharLiteral_IsPreservedVerbatim()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Contain("'x'"),
+            "Char literal 'x' must appear verbatim in the output");
+    }
+
+    [Test]
+    [Description("A single-character regular string literal must pass through verbatim")]
+    public void SingleCharLiterals_SingleCharRegularString_IsPreservedVerbatim()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Contain("\"a\""),
+            "Single-char string literal \"a\" must appear verbatim in the output");
+    }
+
+    [Test]
+    [Description("A single-character verbatim string literal must pass through verbatim")]
+    public void SingleCharLiterals_SingleCharVerbatimString_IsPreservedVerbatim()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Contain("@\"z\""),
+            "Single-char verbatim string literal @\"z\" must appear verbatim in the output");
+    }
+
+    [Test]
+    [Description("Multi-character string literals must still be replaced even when single-char ones are preserved")]
+    public void SingleCharLiterals_MultiCharStrings_AreObfuscated()
+    {
+        var output = ObfuscateFile("SingleCharLiterals.cs");
+        Assert.That(output, Does.Not.Contain("\"hello\""),
+            "Multi-char string literal \"hello\" must be replaced");
+        Assert.That(output, Does.Not.Contain("\"world\""),
+            "Multi-char verbatim string @\"world\" must be replaced");
+        Assert.That(output, Does.Contain("\"someString"),
+            "Multi-char strings must produce a 'someString' placeholder");
+    }
+
     // ── Using directives ──────────────────────────────────────────────────────
 
     [Test]
@@ -265,5 +343,51 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
             System.StringSplitOptions.None).Length - 1;
         Assert.That(genericCount, Is.EqualTo(1));
         Assert.That(linqCount, Is.EqualTo(1));
+    }
+
+    // ── Assembly resolution ───────────────────────────────────────────────────
+
+    [Test]
+    [Description("A proprietary method must always be obfuscated, regardless of the assembly-resolution setting")]
+    public void AssemblyResolution_CustomMethod_IsAlwaysObfuscated()
+    {
+        var output = ObfuscateFile("AssemblyResolution.cs");
+        Assert.That(output, Does.Not.Contain("ProcessItems"),
+            "Proprietary method 'ProcessItems' must be replaced with a placeholder");
+    }
+
+    [Test]
+    [Description("BCL method names must appear verbatim when assembly resolution is enabled (the default)")]
+    public void AssemblyResolution_BclMethodNames_ArePreservedWhenEnabled()
+    {
+        var output = ObfuscateFile("AssemblyResolution.cs"); // useAssemblyResolution = true (default)
+        Assert.That(output, Does.Contain("IsNullOrEmpty"),
+            "BCL method 'string.IsNullOrEmpty' must be preserved verbatim");
+        Assert.That(output, Does.Contain("WriteLine"),
+            "BCL method 'Console.WriteLine' must be preserved verbatim");
+        Assert.That(output, Does.Contain("ToUpper"),
+            "BCL method 'string.ToUpper' must be preserved verbatim");
+    }
+
+    [Test]
+    [Description("BCL method names must be obfuscated when assembly resolution is disabled")]
+    public void AssemblyResolution_BclMethodNames_AreObfuscatedWhenDisabled()
+    {
+        var output = ObfuscateFileWithOptions("AssemblyResolution.cs", useAssemblyResolution: false);
+        Assert.That(output, Does.Not.Contain("IsNullOrEmpty"),
+            "BCL method 'IsNullOrEmpty' must be replaced when assembly resolution is off");
+        Assert.That(output, Does.Not.Contain("WriteLine"),
+            "BCL method 'WriteLine' must be replaced when assembly resolution is off");
+        Assert.That(output, Does.Not.Contain("ToUpper"),
+            "BCL method 'ToUpper' must be replaced when assembly resolution is off");
+    }
+
+    [Test]
+    [Description("Assembly resolution must not affect how proprietary names are obfuscated — they must still get consistent placeholders")]
+    public void AssemblyResolution_CustomMethod_GetsPlaceholderNotVerbatim()
+    {
+        var output = ObfuscateFile("AssemblyResolution.cs");
+        Assert.That(output, Does.Contain("SomeMethod"),
+            "Proprietary method must be replaced with a 'SomeMethod' placeholder");
     }
 }
