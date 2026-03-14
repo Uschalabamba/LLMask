@@ -26,9 +26,13 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
         AddBoolOption((LLMaskSettings s) => s.UsePsiFrequencySorting, "Sort identifiers by frequency (most-used names get the lowest numbers, e.g. SomeMethod1)");
         AddBoolOption((LLMaskSettings s) => s.UseAssemblyResolution, "Auto-preserve identifiers from well-known assemblies (System.*, Serilog, Newtonsoft, …) without manual whitelist entries");
 
-        AddHeader("String-Based Obfuscation (selection)");
-        AddBoolOption((LLMaskSettings s) => s.UseStringObfuscation, "Enable string-based obfuscation");
-        AddStringOption((LLMaskSettings s) => s.CustomWhitelist, "Additional preserved identifiers (comma-separated)");
+        AddHeader("Selection Obfuscation Mode");
+        AddBoolOption(
+            (LLMaskSettings s) => s.UsePsiForSelection,
+            "Use PSI-based obfuscation for selections " +
+            "(unchecked = fast string-based; checked = full PSI analysis with consistent identifier numbering)");
+        AddStringOption((LLMaskSettings s) => s.CustomWhitelist,
+            "Additional preserved identifiers (comma-separated) — used by both modes");
 
         AddHeader("Config File");
         AddCommentText(

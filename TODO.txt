@@ -1,13 +1,11 @@
 Roadmap:
 
-- Partial PSI-Walking - as described by you above and may replace the pure string analysis option (maybe statically via configuration or - if possible - dynamically based on some pre-processing logic)
 - DeObfuscation of previously obfuscated code via direct name mappings
 
 Approach-unspecific features like:
 
 - Obfuscation "Themes" (for one class/file, obfuscate with related but basic terms (customer, order, productId, price) based on very basic semantics)
 - probably more QOL stuff to come
-- common types from well known namespaces should be called by an abbreviation of their name instead of a true obfuscation.
 
 
 

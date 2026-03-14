@@ -57,9 +57,6 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
             .BindToContextTransient(ContextRange.ApplicationWide)
             .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
 
-        if (!settings.UseStringObfuscation && !settings.UsePsiObfuscation)
-            return false;
-
         var solutionRoot = element.GetSolution().SolutionFilePath.Directory.FullPath;
         var config = string.IsNullOrWhiteSpace(settings.ConfigFilePath)
             ? LLMaskDataProvider.Load(solutionRoot)
