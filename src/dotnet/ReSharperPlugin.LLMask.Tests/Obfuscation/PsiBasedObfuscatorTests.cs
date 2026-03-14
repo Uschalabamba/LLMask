@@ -7,6 +7,7 @@ using JetBrains.ReSharper.Psi.Files;
 using JetBrains.ReSharper.Psi.Tree;
 using JetBrains.ReSharper.Resources.Shell;
 using JetBrains.ReSharper.TestFramework;
+using JetBrains.Util;
 using NUnit.Framework;
 using ReSharperPlugin.LLMask.Obfuscation;
 using System;
@@ -54,6 +55,52 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
 
                 result = PsiBasedObfuscator.Obfuscate(
                     psiFile!,
+                    sortByFrequency: sortByFrequency,
+                    useAssemblyResolution: useAssemblyResolution);
+            }
+        });
+
+        return result;
+    }
+
+    /// <summary>
+    /// Opens <paramref name="fileName"/>, locates the first method named
+    /// <paramref name="methodName"/> via PSI, and returns the result of
+    /// <see cref="PartialPsiBasedObfuscator.ObfuscateSelection"/> scoped to
+    /// that method's document range.
+    /// </summary>
+    private string ObfuscateMethodSelection(
+        string fileName,
+        string methodName,
+        bool sortByFrequency = true,
+        bool useAssemblyResolution = true)
+    {
+        var result = string.Empty;
+
+        WithSingleProject(fileName, (_, _, project) =>
+        {
+            using (ReadLockCookie.Create())
+            {
+                var projectFile = project.GetSubItems()
+                    .OfType<IProjectFile>()
+                    .Single();
+
+                var psiFile = projectFile
+                    .ToSourceFile()!
+                    .GetPrimaryPsiFile() as ICSharpFile;
+
+                // JetBrains' Descendants<T>() returns a custom enumerable that
+                // doesn't expose LINQ's First(predicate) — use a foreach loop.
+                IMethodDeclaration? method = null;
+                foreach (var m in psiFile!.Descendants<IMethodDeclaration>())
+                    if (m.DeclaredName == methodName) { method = m; break; }
+                Assert.That(method, Is.Not.Null, $"Method '{methodName}' not found in {fileName}");
+
+                var range = method.GetDocumentRange().TextRange;
+
+                result = PartialPsiBasedObfuscator.ObfuscateSelection(
+                    psiFile!,
+                    range,
                     sortByFrequency: sortByFrequency,
                     useAssemblyResolution: useAssemblyResolution);
             }
@@ -612,6 +659,67 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
         var output = ObfuscateFile("InterpolatedString.cs");
         Assert.That(output, Does.Not.Match(@"someString\d+""\w"),
             "Old broken pattern: someStringN\"identifier must not appear in output");
+    }
+
+    // ── Selection carving (PartialPsiBasedObfuscator) ─────────────────────────
+
+    [Test]
+    public void SelectionCarving_DoesNotContainOuterFieldPlaceholder()
+    {
+        // The outer field "outerSecret" is declared outside InnerMethod.
+        // When we carve only InnerMethod, its placeholder must not appear.
+        var fullOutput = ObfuscateFile("SelectionObfuscation.cs");
+        var carved     = ObfuscateMethodSelection("SelectionObfuscation.cs", "InnerMethod");
+
+        // Find whatever placeholder outerSecret received in the full output
+        // and verify it is absent from the carved selection.
+        Assert.That(fullOutput, Does.Contain("_myField"),
+            "Full-file output should contain the outer field placeholder");
+        Assert.That(carved, Does.Not.Contain("_myField"),
+            "Carved selection must not contain the outer field placeholder");
+    }
+
+    [Test]
+    public void SelectionCarving_ContainsMethodBody()
+    {
+        // The carved output must contain tokens that appear inside InnerMethod.
+        var carved = ObfuscateMethodSelection("SelectionObfuscation.cs", "InnerMethod");
+        Assert.That(carved, Does.Contain("InnerMethod").Or.Contain("SomeMethod"),
+            "Carved output must contain the method declaration tokens");
+    }
+
+    [Test]
+    public void SelectionCarving_IdentifiersConsistentWithFullFile()
+    {
+        // "ex" is an ArgumentException variable → abbreviated prefix "ae" → ae1.
+        // The carved selection must use the same placeholder as the full-file output.
+        var fullOutput = ObfuscateFile("SelectionObfuscation.cs");
+        var carved     = ObfuscateMethodSelection("SelectionObfuscation.cs", "InnerMethod");
+
+        Assert.That(fullOutput, Does.Contain("ae1"),
+            "Full-file output should assign ae1 to the ArgumentException variable");
+        Assert.That(carved, Does.Contain("ae1"),
+            "Carved selection must use the same ae1 placeholder as the full-file output");
+    }
+
+    [Test]
+    public void SelectionCarving_BclNamesPreservedVerbatim()
+    {
+        // HelpLink is a BCL property (System.Exception) — resolved by Pass 1c.
+        // It must appear verbatim in the carved output when assembly resolution is on.
+        var carved = ObfuscateMethodSelection("SelectionObfuscation.cs", "InnerMethod");
+        Assert.That(carved, Does.Contain("HelpLink"),
+            "BCL property name HelpLink must be preserved verbatim inside the carved selection");
+    }
+
+    [Test]
+    public void SelectionCarving_BclNamesObfuscatedWhenResolutionDisabled()
+    {
+        // With assembly resolution off, HelpLink is no longer preserved.
+        var carved = ObfuscateMethodSelection("SelectionObfuscation.cs", "InnerMethod",
+            useAssemblyResolution: false);
+        Assert.That(carved, Does.Not.Contain("HelpLink"),
+            "With assembly resolution disabled, HelpLink must be obfuscated");
     }
 
     // ── Diagnostic ────────────────────────────────────────────────────────────

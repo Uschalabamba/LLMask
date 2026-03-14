@@ -11,8 +11,8 @@ namespace ReSharperPlugin.LLMask.Settings;
 [SettingsKey(typeof(EnvironmentSettings), "LLMask Plugin Settings")]
 public class LLMaskSettings
 {
-    [SettingsEntry(true, "Obfuscate selected code using string-based analysis when triggering the context action")]
-    public bool UseStringObfuscation;
+    [SettingsEntry(false, "Use PSI-based obfuscation for code selections (unchecked = fast string-based mode)")]
+    public bool UsePsiForSelection;
 
     [SettingsEntry(true, "Obfuscate an entire .cs file using PSI-based analysis when triggering the file action")]
     public bool UsePsiObfuscation;

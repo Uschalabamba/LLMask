@@ -41,13 +41,37 @@ public static class PsiBasedObfuscator
     private static readonly Lazy<HashSet<string>> DefaultWellKnownRoots =
         new(() => new HashSet<string>(LLMaskDataProvider.GetEmbedded().WellKnownNamespaceRoots, StringComparer.Ordinal));
 
+    /// <summary>
+    /// Obfuscates the entire file and returns the result as a string.
+    /// Delegates to <see cref="ObfuscateCore"/> without building the token-offset map.
+    /// </summary>
     public static string Obfuscate(
         ICSharpFile file,
         IEnumerable<string>? extraPreservedWords = null,
         IEnumerable<string>? basePreservedWords = null,
         bool sortByFrequency = true,
         bool useAssemblyResolution = true,
-        IEnumerable<string>? wellKnownRoots = null)
+        IEnumerable<string>? wellKnownRoots = null) =>
+        ObfuscateCore(file, extraPreservedWords, basePreservedWords,
+            sortByFrequency, useAssemblyResolution, wellKnownRoots,
+            buildTokenMap: false).fullOutput;
+
+    /// <summary>
+    /// Core obfuscation implementation.  When <paramref name="buildTokenMap"/> is
+    /// <see langword="true"/>, also returns a parallel list mapping each token's
+    /// original document offset to its start position in the output string.
+    /// <see cref="PartialPsiBasedObfuscator"/> uses the map to carve a selection
+    /// from the full output without duplicating any pass logic.
+    /// </summary>
+    internal static (string fullOutput, List<(int origOffset, int outOffset)>? tokenMap)
+        ObfuscateCore(
+        ICSharpFile file,
+        IEnumerable<string>? extraPreservedWords = null,
+        IEnumerable<string>? basePreservedWords = null,
+        bool sortByFrequency = true,
+        bool useAssemblyResolution = true,
+        IEnumerable<string>? wellKnownRoots = null,
+        bool buildTokenMap = false)
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
@@ -423,6 +447,13 @@ public static class PsiBasedObfuscator
         }
 
         // ── Pass 2: walk tokens and build output ──────────────────────────────
+        // When buildTokenMap is requested (used by PartialPsiBasedObfuscator for
+        // selection carving), we record each token's original document start offset
+        // alongside its start position in the output buffer.  Using-directive tokens
+        // are excluded from the map because they are never part of a code selection.
+        List<(int origOffset, int outOffset)>? tokenMap =
+            buildTokenMap ? new List<(int origOffset, int outOffset)>() : null;
+
         var emittedUsings = new HashSet<IUsingDirective>();
         foreach (var token in file.Descendants<ITokenNode>())
         {
@@ -439,6 +470,9 @@ public static class PsiBasedObfuscator
                 continue;
             }
 
+            // Track offset mapping for selection carving (no-op when map is null).
+            tokenMap?.Add((token.GetDocumentRange().StartOffset.Offset, sb.Length));
+
             var tokenType = token.GetTokenType();
             var raw = token.GetText();
 
@@ -448,7 +482,7 @@ public static class PsiBasedObfuscator
                 // Drop comments entirely — they add noise without leaking proprietary
                 // information. Covers //, /// XML-doc, and /* */ block comments.
             }
-            else if (IsInterpolatedStringPart(tokenType))
+            else if (tokenType.IsInterpolatedStringPart())
             {
                 // Emit structural delimiters verbatim; obfuscate only the text fragment
                 // between them (e.g. the "r" in $"r{…}" or " c" in }· c{).
@@ -456,7 +490,7 @@ public static class PsiBasedObfuscator
                 // they carry no proprietary information.
                 sb.Append(ObfuscateInterpolatedStringPart(raw, tokenType, strCounters));
             }
-            else if (IsStringLiteralToken(tokenType))
+            else if (tokenType.IsStringLiteralToken())
             {
                 var content = StringBasedObfuscator.ExtractStringContent(raw);
                 if (content.Length == 1)
@@ -511,7 +545,7 @@ public static class PsiBasedObfuscator
             }
         }
 
-        return sb.ToString();
+        return (sb.ToString(), tokenMap);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -839,30 +873,6 @@ public static class PsiBasedObfuscator
         }
         return sb.ToString();
     }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // String literal token detection
-    // ─────────────────────────────────────────────────────────────────────────
-
-    // Regular/verbatim/raw non-interpolated string literals — these are complete
-    // tokens that can be replaced wholesale with a "someStringN" placeholder.
-    private static bool IsStringLiteralToken(JetBrains.ReSharper.Psi.Parsing.TokenNodeType tokenType) =>
-        tokenType == CSharpTokenType.STRING_LITERAL_REGULAR
-        || tokenType == CSharpTokenType.STRING_LITERAL_VERBATIM
-        || tokenType == CSharpTokenType.SINGLE_LINE_RAW_STRING_LITERAL
-        || tokenType == CSharpTokenType.MULTI_LINE_RAW_STRING_LITERAL;
-
-    // Interpolated string parts that contain a user-visible text fragment between
-    // structural delimiters ($", {, }, ").  Raw interpolated string tokens
-    // ($"""…""") are intentionally excluded and fall through to the verbatim
-    // else branch — their delimiter nesting is too complex to parse safely here.
-    private static bool IsInterpolatedStringPart(JetBrains.ReSharper.Psi.Parsing.TokenNodeType tokenType) =>
-        tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_START
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_MIDDLE
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_REGULAR_END
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_START
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_MIDDLE
-        || tokenType == CSharpTokenType.INTERPOLATED_STRING_VERBATIM_END;
 
     /// <summary>
     /// Processes one fragment of a (non-raw) interpolated string token, keeping
