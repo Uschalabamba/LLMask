@@ -41,7 +41,7 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
             .BindToContextTransient(ContextRange.ApplicationWide)
             .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
 
-        return !settings.UsePsiForSelection;
+        return settings.SelectionMode == SelectionObfuscatorMode.StringBased;
     }
 
     protected override Action<ITextControl> ExecutePsiTransaction(ISolution solution, IProgressIndicator progress)
