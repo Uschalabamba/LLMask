@@ -7,6 +7,7 @@ using System.Text;
 using JetBrains.ReSharper.Psi;
 using JetBrains.ReSharper.Psi.CSharp.Parsing;
 using JetBrains.ReSharper.Psi.CSharp.Tree;
+using JetBrains.ReSharper.Psi.Modules;
 using JetBrains.ReSharper.Psi.Tree;
 using ReSharperPlugin.LLMask.Data;
 
@@ -803,13 +804,17 @@ public static class PsiBasedObfuscator
         // Skip non-named types (arrays, pointers, type parameters, …).
         if (localVar.Type is not IDeclaredType declaredType) return null;
 
-        // GetTypeElement() requires a CompilationContextCookie to be active.
-        // When called from the RD wire thread without one, the PSI layer logs a
-        // "Implicit UniversalModuleReferenceContext" Fail and may throw.
-        // Fall back to null (→ localVar prefix) rather than crashing the handler.
+        // GetTypeElement() requires an active CompilationContextCookie to resolve
+        // the module reference context.  Without one the PSI layer logs a
+        // "Implicit UniversalModuleReferenceContext" warning and may throw.
+        // We create the cookie from the declaration's own module so the call is
+        // always explicit and no log noise is produced.
         ITypeElement? typeElement;
-        try { typeElement = declaredType.GetTypeElement(); }
-        catch { return null; }
+        using (CompilationContextCookie.GetOrCreate(
+                   decl.GetPsiModule().GetContextFromModule()))
+        {
+            typeElement = declaredType.GetTypeElement();
+        }
         if (typeElement == null) return null;
 
         var fullName = typeElement.GetClrName().FullName;
