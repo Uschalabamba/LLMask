@@ -27,10 +27,12 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
         AddBoolOption((LLMaskSettings s) => s.UseAssemblyResolution, "Auto-preserve identifiers from well-known assemblies (System.*, Serilog, Newtonsoft, …) without manual whitelist entries");
 
         AddHeader("Selection Obfuscation Mode");
-        AddBoolOption(
-            (LLMaskSettings s) => s.UsePsiForSelection,
-            "Use PSI-based obfuscation for selections " +
-            "(unchecked = fast string-based; checked = full PSI analysis with consistent identifier numbering)");
+        AddComboEnum(
+            (LLMaskSettings s) => s.SelectionMode,
+            "Selection mode",
+            (SelectionObfuscatorMode m) => m == SelectionObfuscatorMode.StringBased
+                ? "Fast (string-based)"
+                : "Full PSI analysis");
         AddStringOption((LLMaskSettings s) => s.CustomWhitelist,
             "Additional preserved identifiers (comma-separated) — used by both modes");
 

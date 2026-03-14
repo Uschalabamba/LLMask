@@ -42,7 +42,7 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
             .BindToContextTransient(ContextRange.ApplicationWide)
             .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
 
-        return settings.UsePsiForSelection;
+        return settings.SelectionMode == SelectionObfuscatorMode.PsiBased;
     }
 
     protected override Action<ITextControl> ExecutePsiTransaction(
