@@ -44,30 +44,37 @@ namespace JetBrains.Rider.Model
     //fields
     //public fields
     [NotNull] public IRdEndpoint<string, string> ObfuscateFile => _ObfuscateFile;
+    [NotNull] public IRdEndpoint<string, string> DeobfuscateText => _DeobfuscateText;
     [NotNull] public IViewableProperty<bool> IsPsiObfuscationEnabled => _IsPsiObfuscationEnabled;
     
     //private fields
     [NotNull] private readonly RdCall<string, string> _ObfuscateFile;
+    [NotNull] private readonly RdCall<string, string> _DeobfuscateText;
     [NotNull] private readonly RdProperty<bool> _IsPsiObfuscationEnabled;
     
     //primary constructor
     private LLMaskModel(
       [NotNull] RdCall<string, string> obfuscateFile,
+      [NotNull] RdCall<string, string> deobfuscateText,
       [NotNull] RdProperty<bool> isPsiObfuscationEnabled
     )
     {
       if (obfuscateFile == null) throw new ArgumentNullException("obfuscateFile");
+      if (deobfuscateText == null) throw new ArgumentNullException("deobfuscateText");
       if (isPsiObfuscationEnabled == null) throw new ArgumentNullException("isPsiObfuscationEnabled");
       
       _ObfuscateFile = obfuscateFile;
+      _DeobfuscateText = deobfuscateText;
       _IsPsiObfuscationEnabled = isPsiObfuscationEnabled;
       _IsPsiObfuscationEnabled.OptimizeNested = true;
       BindableChildren.Add(new KeyValuePair<string, object>("obfuscateFile", _ObfuscateFile));
+      BindableChildren.Add(new KeyValuePair<string, object>("deobfuscateText", _DeobfuscateText));
       BindableChildren.Add(new KeyValuePair<string, object>("isPsiObfuscationEnabled", _IsPsiObfuscationEnabled));
     }
     //secondary constructor
     private LLMaskModel (
     ) : this (
+      new RdCall<string, string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString, JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString),
       new RdCall<string, string>(JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString, JetBrains.Rd.Impl.Serializers.ReadString, JetBrains.Rd.Impl.Serializers.WriteString),
       new RdProperty<bool>(JetBrains.Rd.Impl.Serializers.ReadBool, JetBrains.Rd.Impl.Serializers.WriteBool)
     ) {}
@@ -76,7 +83,7 @@ namespace JetBrains.Rider.Model
     
     
     
-    protected override long SerializationHash => -8690633136334751269L;
+    protected override long SerializationHash => -2058256324601150860L;
     
     protected override Action<ISerializers> Register => RegisterDeclaredTypesSerializers;
     public static void RegisterDeclaredTypesSerializers(ISerializers serializers)
@@ -103,6 +110,7 @@ namespace JetBrains.Rider.Model
       printer.Println("LLMaskModel (");
       using (printer.IndentCookie()) {
         printer.Print("obfuscateFile = "); _ObfuscateFile.PrintEx(printer); printer.Println();
+        printer.Print("deobfuscateText = "); _DeobfuscateText.PrintEx(printer); printer.Println();
         printer.Print("isPsiObfuscationEnabled = "); _IsPsiObfuscationEnabled.PrintEx(printer); printer.Println();
       }
       printer.Print(")");

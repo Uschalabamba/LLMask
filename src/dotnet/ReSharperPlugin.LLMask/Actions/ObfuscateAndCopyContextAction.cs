@@ -67,9 +67,10 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);
-            var obfuscated   = StringBasedObfuscator.Obfuscate(selectedText, extraWords, config.BaseWhitelist);
-            log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, copied to clipboard");
-            System.Windows.Clipboard.SetText(obfuscated);
+            var (obfuscated, mapping) = StringBasedObfuscator.Obfuscate(selectedText, extraWords, config.BaseWhitelist);
+            LLMaskMappingStore.AppendSession(solutionRoot, mapping);
+            log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, session {mapping.SessionId}, copied to clipboard");
+            System.Windows.Clipboard.SetText(mapping.MarkerLine + "\n" + obfuscated);
         };
     }
 }

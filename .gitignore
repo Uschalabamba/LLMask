@@ -27,3 +27,9 @@ output
 .vs
 _ReSharper*
 _dotTrace*
+
+# LLMask runtime data
+.llmask-map.json
+
+# Claude Code local settings
+.claude/settings.local.json

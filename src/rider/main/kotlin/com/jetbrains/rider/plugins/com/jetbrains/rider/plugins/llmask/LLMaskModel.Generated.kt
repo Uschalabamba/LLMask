@@ -20,6 +20,7 @@ import kotlin.jvm.JvmStatic
  */
 class LLMaskModel private constructor(
     private val _obfuscateFile: RdCall<String, String>,
+    private val _deobfuscateText: RdCall<String, String>,
     private val _isPsiObfuscationEnabled: RdOptionalProperty<Boolean>
 ) : RdExtBase() {
     //companion
@@ -47,7 +48,7 @@ class LLMaskModel private constructor(
         }
         
         
-        const val serializationHash = -8690633136334751269L
+        const val serializationHash = -2058256324601150860L
         
     }
     override val serializersOwner: ISerializersOwner get() = LLMaskModel
@@ -55,6 +56,7 @@ class LLMaskModel private constructor(
     
     //fields
     val obfuscateFile: IRdCall<String, String> get() = _obfuscateFile
+    val deobfuscateText: IRdCall<String, String> get() = _deobfuscateText
     val isPsiObfuscationEnabled: IOptProperty<Boolean> get() = _isPsiObfuscationEnabled
     //methods
     //initializer
@@ -64,12 +66,14 @@ class LLMaskModel private constructor(
     
     init {
         bindableChildren.add("obfuscateFile" to _obfuscateFile)
+        bindableChildren.add("deobfuscateText" to _deobfuscateText)
         bindableChildren.add("isPsiObfuscationEnabled" to _isPsiObfuscationEnabled)
     }
     
     //secondary constructor
     private constructor(
     ) : this(
+        RdCall<String, String>(FrameworkMarshallers.String, FrameworkMarshallers.String),
         RdCall<String, String>(FrameworkMarshallers.String, FrameworkMarshallers.String),
         RdOptionalProperty<Boolean>(FrameworkMarshallers.Bool)
     )
@@ -81,6 +85,7 @@ class LLMaskModel private constructor(
         printer.println("LLMaskModel (")
         printer.indent {
             print("obfuscateFile = "); _obfuscateFile.print(printer); println()
+            print("deobfuscateText = "); _deobfuscateText.print(printer); println()
             print("isPsiObfuscationEnabled = "); _isPsiObfuscationEnabled.print(printer); println()
         }
         printer.print(")")
@@ -89,6 +94,7 @@ class LLMaskModel private constructor(
     override fun deepClone(): LLMaskModel   {
         return LLMaskModel(
             _obfuscateFile.deepClonePolymorphic(),
+            _deobfuscateText.deepClonePolymorphic(),
             _isPsiObfuscationEnabled.deepClonePolymorphic()
         )
     }

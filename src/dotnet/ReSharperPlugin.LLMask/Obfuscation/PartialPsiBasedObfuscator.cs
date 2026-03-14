@@ -23,7 +23,7 @@ public static class PartialPsiBasedObfuscator
     /// Snaps to token boundaries (selections that start or end mid-token are expanded
     /// to the enclosing token — this never occurs in practice for code selections).
     /// </summary>
-    public static string ObfuscateSelection(
+    public static (string output, LLMaskMapping mapping) ObfuscateSelection(
         ICSharpFile file,
         TextRange selectionRange,
         IEnumerable<string>? extraPreservedWords     = null,
@@ -32,7 +32,7 @@ public static class PartialPsiBasedObfuscator
         bool useAssemblyResolution                   = true,
         IEnumerable<string>? wellKnownNamespaceRoots = null)
     {
-        var (fullOutput, tokenMap) = PsiBasedObfuscator.ObfuscateCore(
+        var (fullOutput, mapping, tokenMap) = PsiBasedObfuscator.ObfuscateCore(
             file,
             extraPreservedWords,
             basePreservedWords,
@@ -41,9 +41,10 @@ public static class PartialPsiBasedObfuscator
             wellKnownNamespaceRoots,
             buildTokenMap: true);
 
-        return tokenMap is { Count: > 0 }
+        var carved = tokenMap is { Count: > 0 }
             ? CarveSelection(fullOutput, tokenMap, selectionRange)
             : string.Empty;
+        return (carved, mapping);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

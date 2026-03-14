@@ -56,7 +56,7 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
                 result = PsiBasedObfuscator.Obfuscate(
                     psiFile!,
                     sortByFrequency: sortByFrequency,
-                    useAssemblyResolution: useAssemblyResolution);
+                    useAssemblyResolution: useAssemblyResolution).output;
             }
         });
 
@@ -102,7 +102,7 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
                     psiFile!,
                     range,
                     sortByFrequency: sortByFrequency,
-                    useAssemblyResolution: useAssemblyResolution);
+                    useAssemblyResolution: useAssemblyResolution).output;
             }
         });
 

@@ -33,7 +33,7 @@ public static class StringBasedObfuscator
     private static readonly Lazy<HashSet<string>> preservedWords =
         new(() => new HashSet<string>(LLMaskDataProvider.GetEmbedded().BaseWhitelist, StringComparer.Ordinal));
 
-    private static readonly Regex tokenizer = new (
+    internal static readonly Regex tokenizer = new (
         // 1. Block comment (may span lines)
         @"(?<BlockComment>/\*[\s\S]*?\*/)" +
         // 2. Line / doc comment
@@ -55,7 +55,7 @@ public static class StringBasedObfuscator
         RegexOptions.Compiled
     );
 
-    public static string Obfuscate(
+    public static (string output, LLMaskMapping mapping) Obfuscate(
         string code,
         IEnumerable<string>? extraPreservedWords = null,
         IEnumerable<string>? basePreservedWords = null)
@@ -139,7 +139,7 @@ public static class StringBasedObfuscator
             }
         }
 
-        return sb.ToString();
+        return (sb.ToString(), LLMaskMapping.FromForwardMaps(idMap, strMap));
     }
 
     internal static string MakeIdentifierPlaceholder(string id, int[] counters)

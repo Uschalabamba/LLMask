@@ -77,8 +77,19 @@ public class LLMaskHost : IStartupActivity
                 var psiFile = projectFile?.ToSourceFile()?.GetPrimaryPsiFile() as ICSharpFile;
                 if (psiFile == null) return string.Empty;
 
-                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, config.BaseWhitelist, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, config.WellKnownNamespaceRoots);
+                var (output, mapping) = PsiBasedObfuscator.Obfuscate(psiFile, extraWords, config.BaseWhitelist, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, config.WellKnownNamespaceRoots);
+                LLMaskMappingStore.AppendSession(solution.SolutionFilePath.Directory.FullPath, mapping);
+                return mapping.MarkerLine + "\n" + output;
             }
+        });
+
+        model.DeobfuscateText.SetSync((lt, text) =>
+        {
+            var solutionRoot = solution.SolutionFilePath.Directory.FullPath;
+            var sessionId = Deobfuscator.ExtractSessionId(text);
+            var mapping = LLMaskMappingStore.Load(solutionRoot, sessionId);
+            if (mapping == null) return text;
+            return Deobfuscator.Deobfuscate(text, mapping);
         });
 #endif
     }

@@ -42,19 +42,22 @@ public static class PsiBasedObfuscator
         new(() => new HashSet<string>(LLMaskDataProvider.GetEmbedded().WellKnownNamespaceRoots, StringComparer.Ordinal));
 
     /// <summary>
-    /// Obfuscates the entire file and returns the result as a string.
+    /// Obfuscates the entire file and returns the result and the session mapping.
     /// Delegates to <see cref="ObfuscateCore"/> without building the token-offset map.
     /// </summary>
-    public static string Obfuscate(
+    public static (string output, LLMaskMapping mapping) Obfuscate(
         ICSharpFile file,
         IEnumerable<string>? extraPreservedWords = null,
         IEnumerable<string>? basePreservedWords = null,
         bool sortByFrequency = true,
         bool useAssemblyResolution = true,
-        IEnumerable<string>? wellKnownRoots = null) =>
-        ObfuscateCore(file, extraPreservedWords, basePreservedWords,
+        IEnumerable<string>? wellKnownRoots = null)
+    {
+        var (fullOutput, mapping, _) = ObfuscateCore(file, extraPreservedWords, basePreservedWords,
             sortByFrequency, useAssemblyResolution, wellKnownRoots,
-            buildTokenMap: false).fullOutput;
+            buildTokenMap: false);
+        return (fullOutput, mapping);
+    }
 
     /// <summary>
     /// Core obfuscation implementation.  When <paramref name="buildTokenMap"/> is
@@ -63,7 +66,7 @@ public static class PsiBasedObfuscator
     /// <see cref="PartialPsiBasedObfuscator"/> uses the map to carve a selection
     /// from the full output without duplicating any pass logic.
     /// </summary>
-    internal static (string fullOutput, List<(int origOffset, int outOffset)>? tokenMap)
+    internal static (string fullOutput, LLMaskMapping mapping, List<(int origOffset, int outOffset)>? tokenMap)
         ObfuscateCore(
         ICSharpFile file,
         IEnumerable<string>? extraPreservedWords = null,
@@ -545,7 +548,7 @@ public static class PsiBasedObfuscator
             }
         }
 
-        return (sb.ToString(), tokenMap);
+        return (sb.ToString(), LLMaskMapping.FromForwardMaps(idMap, strMap), tokenMap);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -800,7 +803,13 @@ public static class PsiBasedObfuscator
         // Skip non-named types (arrays, pointers, type parameters, …).
         if (localVar.Type is not IDeclaredType declaredType) return null;
 
-        var typeElement = declaredType.GetTypeElement();
+        // GetTypeElement() requires a CompilationContextCookie to be active.
+        // When called from the RD wire thread without one, the PSI layer logs a
+        // "Implicit UniversalModuleReferenceContext" Fail and may throw.
+        // Fall back to null (→ localVar prefix) rather than crashing the handler.
+        ITypeElement? typeElement;
+        try { typeElement = declaredType.GetTypeElement(); }
+        catch { return null; }
         if (typeElement == null) return null;
 
         var fullName = typeElement.GetClrName().FullName;

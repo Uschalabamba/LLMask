@@ -73,7 +73,7 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
 
         // All PSI work happens inside ExecutePsiTransaction where a read lock is held.
         // The returned lambda only touches the clipboard (UI-safe, no PSI access).
-        var result = PartialPsiBasedObfuscator.ObfuscateSelection(
+        var (output, mapping) = PartialPsiBasedObfuscator.ObfuscateSelection(
             psiFile,
             selectionRange,
             extraWords,
@@ -82,7 +82,8 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
             settings.UseAssemblyResolution,
             config.WellKnownNamespaceRoots);
 
-        log.Info($"LLMask PSI-obfuscated selection ({selectionRange.Length} chars), copied to clipboard");
-        return _ => System.Windows.Clipboard.SetText(result);
+        LLMaskMappingStore.AppendSession(solutionRoot, mapping);
+        log.Info($"LLMask PSI-obfuscated selection ({selectionRange.Length} chars), session {mapping.SessionId}, copied to clipboard");
+        return _ => System.Windows.Clipboard.SetText(mapping.MarkerLine + "\n" + output);
     }
 }
