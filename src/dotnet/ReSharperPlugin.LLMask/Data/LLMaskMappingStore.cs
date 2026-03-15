@@ -16,6 +16,9 @@ public static class LLMaskMappingStore
 {
     public const string FileName = ".llmask-map.json";
 
+    private const int MaxSessionAgeDays = 30;
+    private const int MaxSessionCount   = 500;
+
     private static string FilePath(string solutionRoot) =>
         Path.Combine(solutionRoot, FileName);
 
@@ -77,6 +80,15 @@ public static class LLMaskMappingStore
         }
 
         sessions.Add(mapping);
+
+        // Prune: drop sessions older than MaxSessionAgeDays, then cap at MaxSessionCount.
+        var cutoff = DateTime.UtcNow.AddDays(-MaxSessionAgeDays);
+        sessions.RemoveAll(s =>
+            DateTime.TryParse(s.Timestamp, null,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var ts) && ts < cutoff);
+        if (sessions.Count > MaxSessionCount)
+            sessions.RemoveRange(0, sessions.Count - MaxSessionCount);
+
         File.WriteAllText(path, Serialize(sessions), Encoding.UTF8);
     }
 
