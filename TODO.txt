@@ -1,12 +1,10 @@
 Roadmap:
 
-- DeObfuscation of previously obfuscated code via direct name mappings
-
 Approach-unspecific features like:
 
 - Obfuscation "Themes" (for one class/file, obfuscate with related but basic terms (customer, order, productId, price) based on very basic semantics)
 - probably more QOL stuff to come
-
+- Keyboard shortcuts
 
 
 

@@ -23,7 +23,7 @@ namespace ReSharperPlugin.LLMask;
     Priority = 1)]
 public class AddToWhitelistContextAction(ICSharpContextActionDataProvider provider) : ContextActionBase
 {
-    private static readonly ILog log = JetBrains.Diagnostics.Log.GetLog<AddToWhitelistContextAction>();
+    private static readonly ILog log = Log.GetLog<AddToWhitelistContextAction>();
 
     // Captured in IsAvailable, consumed in ExecutePsiTransaction.
     private string? tokenName;

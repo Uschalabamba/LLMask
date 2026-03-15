@@ -43,11 +43,15 @@ public static class LLMaskDataProvider
     public static LLMaskConfig Load(string? solutionRootPath)
     {
         if (string.IsNullOrEmpty(solutionRootPath))
+        {
             return EmbeddedConfig.Value;
+        }
 
         var filePath = Path.Combine(solutionRootPath, "llmask.json");
         if (!File.Exists(filePath))
+        {
             return EmbeddedConfig.Value;
+        }
 
         try
         {
@@ -68,7 +72,9 @@ public static class LLMaskDataProvider
     public static LLMaskConfig LoadFromFile(string filePath)
     {
         if (!File.Exists(filePath))
+        {
             return EmbeddedConfig.Value;
+        }
 
         try
         {
@@ -122,7 +128,9 @@ public static class LLMaskDataProvider
             RegexOptions.Singleline);
 
         if (!match.Success)
+        {
             return Array.Empty<string>();
+        }
 
         var result = new List<string>();
         var arrayContent = match.Groups[1].Value;
@@ -132,7 +140,9 @@ public static class LLMaskDataProvider
         {
             var value = item.Groups[1].Value;
             if (!string.IsNullOrWhiteSpace(value))
+            {
                 result.Add(value);
+            }
         }
 
         return result;

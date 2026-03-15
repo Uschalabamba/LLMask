@@ -27,18 +27,21 @@ public class RemoveFromWhitelistContextAction(ICSharpContextActionDataProvider p
 
     private string? tokenName;
 
-    public override string Text =>
-        tokenName != null ? $"LLMask: Remove \"{tokenName}\" from whitelist" : "LLMask: Remove from whitelist";
+    public override string Text => this.tokenName != null ? $"LLMask: Remove \"{this.tokenName}\" from whitelist" : "LLMask: Remove from whitelist";
 
     public override bool IsAvailable(IUserDataHolder cache)
     {
         var identifier = provider.GetSelectedElement<IIdentifier>();
         if (identifier == null)
+        {
             return false;
+        }
 
         var name = identifier.Name;
         if (string.IsNullOrWhiteSpace(name))
+        {
             return false;
+        }
 
         var settings = identifier.GetSolution()
             .GetComponent<ISettingsStore>()
@@ -47,20 +50,24 @@ public class RemoveFromWhitelistContextAction(ICSharpContextActionDataProvider p
 
         // Only show when the token is actually in the custom whitelist.
         if (!ParseWhitelist(settings.CustomWhitelist).Contains(name, StringComparer.Ordinal))
+        {
             return false;
+        }
 
-        tokenName = name;
+        this.tokenName = name;
         return true;
     }
 
     protected override Action<ITextControl> ExecutePsiTransaction(ISolution solution, IProgressIndicator progress)
     {
-        var name = tokenName;
+        var name = this.tokenName;
 
         return _ =>
         {
             if (name == null)
+            {
                 return;
+            }
 
             var store = solution.GetComponent<ISettingsStore>()
                 .BindToContextTransient(ContextRange.ApplicationWide);

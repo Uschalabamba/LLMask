@@ -32,6 +32,9 @@ public class LLMaskSettings
     [SettingsEntry("", "Comma-separated list of additional identifiers to preserve (not obfuscate)")]
     public string CustomWhitelist;
 
+    [SettingsEntry("", "Comma-separated list of string literal contents to preserve verbatim (not obfuscate)")]
+    public string CustomStringWhitelist;
+
     [SettingsEntry("", "Absolute path to a custom llmask.json config file. Leave empty to use llmask.json in the solution root (falling back to built-in defaults if absent).")]
     public string ConfigFilePath;
 }

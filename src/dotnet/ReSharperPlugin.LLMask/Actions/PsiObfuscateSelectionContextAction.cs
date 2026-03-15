@@ -33,7 +33,9 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
     {
         var element = provider.GetSelectedElement<ITreeNode>();
         if (element == null || provider.DocumentSelection.IsEmpty)
+        {
             return false;
+        }
 
         // Don't inject ISettingsStore in the constructor — that silently breaks
         // the context-action factory (see memory note).
@@ -51,7 +53,9 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
         var psiFile = provider.GetSelectedElement<ITreeNode>()
             ?.GetContainingFile() as ICSharpFile;
         if (psiFile == null)
+        {
             return _ => { };
+        }
 
         var settings = solution.GetComponent<ISettingsStore>()
             .BindToContextTransient(ContextRange.ApplicationWide)
@@ -60,6 +64,13 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
         var extraWords = string.IsNullOrWhiteSpace(settings.CustomWhitelist)
             ? null
             : settings.CustomWhitelist
+                .Split(',')
+                .Select(w => w.Trim())
+                .Where(w => w.Length > 0);
+
+        var extraStrings = string.IsNullOrWhiteSpace(settings.CustomStringWhitelist)
+            ? null
+            : settings.CustomStringWhitelist
                 .Split(',')
                 .Select(w => w.Trim())
                 .Where(w => w.Length > 0);
@@ -73,16 +84,18 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
 
         // All PSI work happens inside ExecutePsiTransaction where a read lock is held.
         // The returned lambda only touches the clipboard (UI-safe, no PSI access).
-        var result = PartialPsiBasedObfuscator.ObfuscateSelection(
+        var (output, mapping) = PartialPsiBasedObfuscator.ObfuscateSelection(
             psiFile,
             selectionRange,
             extraWords,
             config.BaseWhitelist,
             settings.UsePsiFrequencySorting,
             settings.UseAssemblyResolution,
-            config.WellKnownNamespaceRoots);
+            config.WellKnownNamespaceRoots,
+            extraStrings);
 
-        log.Info($"LLMask PSI-obfuscated selection ({selectionRange.Length} chars), copied to clipboard");
-        return _ => System.Windows.Clipboard.SetText(result);
+        LLMaskMappingStore.AppendSession(solutionRoot, mapping);
+        log.Info($"LLMask PSI-obfuscated selection ({selectionRange.Length} chars), session {mapping.SessionId}, copied to clipboard");
+        return _ => System.Windows.Clipboard.SetText(mapping.MarkerLine + "\n" + output);
     }
 }

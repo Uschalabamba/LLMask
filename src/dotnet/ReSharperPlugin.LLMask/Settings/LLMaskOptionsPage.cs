@@ -35,6 +35,8 @@ public class LLMaskOptionsPage : BeSimpleOptionsPage
                 : "Full PSI analysis");
         AddStringOption((LLMaskSettings s) => s.CustomWhitelist,
             "Additional preserved identifiers (comma-separated) — used by both modes");
+        AddStringOption((LLMaskSettings s) => s.CustomStringWhitelist,
+            "Additional preserved string literals (comma-separated contents, e.g. error,warning) — used by both modes");
 
         AddHeader("Config File");
         AddCommentText(

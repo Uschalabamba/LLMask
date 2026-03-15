@@ -55,10 +55,15 @@ public class LLMaskHost : IStartupActivity
                 .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
 
             if (!settings.UsePsiObfuscation)
+            {
                 return string.Empty;
+            }
 
             var extraWords = string.IsNullOrWhiteSpace(settings.CustomWhitelist) ? null
                 : settings.CustomWhitelist.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
+
+            var extraStrings = string.IsNullOrWhiteSpace(settings.CustomStringWhitelist) ? null
+                : settings.CustomStringWhitelist.Split(',').Select(w => w.Trim()).Where(w => w.Length > 0);
 
             var config = string.IsNullOrWhiteSpace(settings.ConfigFilePath)
                 ? LLMaskDataProvider.Load(solution.SolutionFilePath.Directory.FullPath)
@@ -68,17 +73,33 @@ public class LLMaskHost : IStartupActivity
             {
                 var path = VirtualFileSystemPath.TryParse(
                     filePath, InteractionContext.SolutionContext, FileSystemPathInternStrategy.TRY_GET_INTERNED_BUT_DO_NOT_INTERN);
-                if (path.IsNullOrEmpty()) return string.Empty;
+                if (path.IsNullOrEmpty())
+                {
+                    return string.Empty;
+                }
 
                 var projectFile = solution.FindProjectItemsByLocation(path)
                     .OfType<IProjectFile>()
                     .FirstOrDefault();
 
                 var psiFile = projectFile?.ToSourceFile()?.GetPrimaryPsiFile() as ICSharpFile;
-                if (psiFile == null) return string.Empty;
+                if (psiFile == null)
+                {
+                    return string.Empty;
+                }
 
-                return PsiBasedObfuscator.Obfuscate(psiFile, extraWords, config.BaseWhitelist, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, config.WellKnownNamespaceRoots);
+                var (output, mapping) = PsiBasedObfuscator.Obfuscate(psiFile, extraWords, config.BaseWhitelist, settings.UsePsiFrequencySorting, settings.UseAssemblyResolution, config.WellKnownNamespaceRoots, extraStrings);
+                LLMaskMappingStore.AppendSession(solution.SolutionFilePath.Directory.FullPath, mapping);
+                return mapping.MarkerLine + "\n" + output;
             }
+        });
+
+        model.DeobfuscateText.SetSync((lt, text) =>
+        {
+            var solutionRoot = solution.SolutionFilePath.Directory.FullPath;
+            var sessionId = Deobfuscator.ExtractSessionId(text);
+            var mapping = LLMaskMappingStore.Load(solutionRoot, sessionId);
+            return mapping == null ? text : Deobfuscator.Deobfuscate(text, mapping);
         });
 #endif
     }
