@@ -37,8 +37,6 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
             return false;
         }
 
-        // Don't inject ISettingsStore in the constructor — that silently breaks
-        // the context-action factory (see memory note).
         var settings = element.GetSolution()
             .GetComponent<ISettingsStore>()
             .BindToContextTransient(ContextRange.ApplicationWide)
@@ -50,9 +48,8 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
     protected override Action<ITextControl> ExecutePsiTransaction(
         ISolution solution, IProgressIndicator progress)
     {
-        var psiFile = provider.GetSelectedElement<ITreeNode>()
-            ?.GetContainingFile() as ICSharpFile;
-        if (psiFile == null)
+        if (provider.GetSelectedElement<ITreeNode>()?
+                .GetContainingFile() is not ICSharpFile psiFile)
         {
             return _ => { };
         }
@@ -83,7 +80,6 @@ public class PsiObfuscateSelectionContextAction(ICSharpContextActionDataProvider
         var selectionRange = provider.DocumentSelection.TextRange;
 
         // All PSI work happens inside ExecutePsiTransaction where a read lock is held.
-        // The returned lambda only touches the clipboard (UI-safe, no PSI access).
         var (output, mapping) = PartialPsiBasedObfuscator.ObfuscateSelection(
             psiFile,
             selectionRange,

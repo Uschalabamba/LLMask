@@ -27,14 +27,14 @@ namespace ReSharperPlugin.LLMask;
     Priority = 1)]
 public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvider provider) : ContextActionBase
 {
-    private static readonly ILog Log = JetBrains.Diagnostics.Log.GetLog<AddSelectionToWhitelistContextAction>();
+    private static readonly ILog log = Log.GetLog<AddSelectionToWhitelistContextAction>();
 
     // Identifiers to add, computed in IsAvailable.
-    private List<string>? _newWords;
+    private List<string>? newWords;
 
     public override string Text =>
-        this._newWords is { Count: > 0 }
-            ? $"LLMask: Add {this._newWords.Count} identifier{(this._newWords.Count == 1 ? "" : "s")} to whitelist"
+        this.newWords is { Count: > 0 }
+            ? $"LLMask: Add {this.newWords.Count} identifier{(this.newWords.Count == 1 ? "" : "s")} to whitelist"
             : "LLMask: Add selection identifiers to whitelist";
 
     public override bool IsAvailable(IUserDataHolder cache)
@@ -45,11 +45,7 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
             return false;
         }
 
-        var psiFile = provider.PsiFile as ICSharpFile;
-        if (psiFile == null)
-        {
-            return false;
-        }
+        var psiFile = provider.PsiFile;
 
         var element = provider.GetSelectedElement<ITreeNode>();
         if (element == null)
@@ -71,13 +67,13 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
         var existing  = ParseWhitelist(settings.CustomWhitelist);
         var excluded  = new HashSet<string>(existing.Concat(config.BaseWhitelist), StringComparer.Ordinal);
 
-        this._newWords = CollectNewIdentifiers(psiFile, provider.DocumentSelection.TextRange, excluded);
-        return this._newWords.Count > 0;
+        this.newWords = CollectNewIdentifiers(psiFile, provider.DocumentSelection.TextRange, excluded);
+        return this.newWords.Count > 0;
     }
 
     protected override Action<ITextControl> ExecutePsiTransaction(ISolution solution, IProgressIndicator progress)
     {
-        var toAdd = this._newWords;
+        var toAdd = this.newWords;
 
         return _ =>
         {
@@ -103,7 +99,7 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
             store.SetValue((LLMaskSettings s) => s.CustomWhitelist,
                 string.Join(", ", existing.OrderBy(w => w, StringComparer.Ordinal)));
 
-            Log.Info($"LLMask: added {actuallyNew.Count} identifiers to whitelist: {string.Join(", ", actuallyNew)}");
+            log.Info($"LLMask: added {actuallyNew.Count} identifiers to whitelist: {string.Join(", ", actuallyNew)}");
         };
     }
 
