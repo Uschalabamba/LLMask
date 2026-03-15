@@ -1,6 +1,7 @@
 import com.jetbrains.plugin.structure.base.utils.isFile
 import groovy.ant.FileNameFinder
 import org.apache.tools.ant.taskdefs.condition.Os
+import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.Constants
 import java.io.ByteArrayOutputStream
 
@@ -194,14 +195,17 @@ tasks.publishPlugin {
     dependsOn(tasks.buildPlugin)
     token.set("${PublishToken}")
 
+    val execOps = project.objects.newInstance<ExecOperationsHolder>()
     doLast {
-        exec {
+        execOps.execOps.exec {
             executable("dotnet")
             args("nuget","push","output/${DotnetPluginId}.${version}.nupkg","--api-key","${PublishToken}","--source","https://plugins.jetbrains.com")
             workingDir(rootDir)
         }
     }
 }
+
+abstract class ExecOperationsHolder @Inject constructor(val execOps: ExecOperations)
 
 val riderModel: Configuration by configurations.creating {
     isCanBeConsumed = true
@@ -219,3 +223,4 @@ artifacts {
         builtBy(Constants.Tasks.INITIALIZE_INTELLIJ_PLATFORM_PLUGIN)
     }
 }
+
