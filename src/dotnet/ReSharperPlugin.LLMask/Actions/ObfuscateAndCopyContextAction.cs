@@ -31,7 +31,9 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
     {
         var element = provider.GetSelectedElement<ITreeNode>();
         if (element == null || provider.DocumentSelection.IsEmpty)
+        {
             return false;
+        }
 
         // Hide the context action entirely when string-based obfuscation is disabled.
         // We read settings via the selected element's solution so we don't inject
@@ -57,6 +59,13 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
                 .Select(w => w.Trim())
                 .Where(w => w.Length > 0);
 
+        var extraStrings = string.IsNullOrWhiteSpace(settings.CustomStringWhitelist)
+            ? null
+            : settings.CustomStringWhitelist
+                .Split(',')
+                .Select(w => w.Trim())
+                .Where(w => w.Length > 0);
+
         var solutionRoot = solution.SolutionFilePath.Directory.FullPath;
         var config = string.IsNullOrWhiteSpace(settings.ConfigFilePath)
             ? LLMaskDataProvider.Load(solutionRoot)
@@ -67,7 +76,7 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
         return textControl =>
         {
             var selectedText = textControl.Document.GetText(selectionRange.TextRange);
-            var (obfuscated, mapping) = StringBasedObfuscator.Obfuscate(selectedText, extraWords, config.BaseWhitelist);
+            var (obfuscated, mapping) = StringBasedObfuscator.Obfuscate(selectedText, extraWords, config.BaseWhitelist, extraStrings);
             LLMaskMappingStore.AppendSession(solutionRoot, mapping);
             log.Info($"LLMask obfuscated selection: {selectedText.Length} → {obfuscated.Length} chars, session {mapping.SessionId}, copied to clipboard");
             System.Windows.Clipboard.SetText(mapping.MarkerLine + "\n" + obfuscated);

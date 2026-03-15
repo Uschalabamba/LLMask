@@ -130,7 +130,7 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
     {
         var output = ObfuscateFile("FrequencyOrdering.cs");
         // 'Rare' must not be SomeMethod1 — that belongs to the most-used method.
-        var rareCount = output.Split(["SomeMethod1"], System.StringSplitOptions.None).Length - 1;
+        var rareCount = output.Split(["SomeMethod1"], StringSplitOptions.None).Length - 1;
         // SomeMethod1 appears: 1 declaration + 5 call sites = 6 times (for 'Common')
         Assert.That(rareCount, Is.GreaterThan(1),
             "SomeMethod1 should appear multiple times because it maps to the heavily-used 'Common'");
@@ -173,7 +173,7 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
         var output = ObfuscateFile("ForLoop.cs");
         // ForLoop.cs: for (int i = 0; i < 10; i++) { int temp = i * 2; }
         // 'i' appears at least 4 times; each must become 'index1'
-        var count = output.Split(["index1"], System.StringSplitOptions.None).Length - 1;
+        var count = output.Split(["index1"], StringSplitOptions.None).Length - 1;
         Assert.That(count, Is.GreaterThanOrEqualTo(4),
             "All occurrences of 'i' must map to 'index1'");
     }
@@ -387,9 +387,9 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
     {
         var output = ObfuscateFile("UnknownUsing.cs");
         var genericCount = output.Split(["using System.Collections.Generic;"],
-            System.StringSplitOptions.None).Length - 1;
+            StringSplitOptions.None).Length - 1;
         var linqCount = output.Split(["using System.Linq;"],
-            System.StringSplitOptions.None).Length - 1;
+            StringSplitOptions.None).Length - 1;
         Assert.That(genericCount, Is.EqualTo(1));
         Assert.That(linqCount, Is.EqualTo(1));
     }
@@ -772,7 +772,9 @@ public class PsiBasedObfuscatorTests : BaseTestWithSingleProject
 
                     sb.AppendLine($"{indent}[{concrete}]{tokenText}");
                     if (!string.IsNullOrEmpty(ifaces))
+                    {
                         sb.AppendLine($"{indent}  implements: {ifaces}");
+                    }
                 }
 
                 // ── Reflection: show all gettable properties of the first IPropertyInitializer ──

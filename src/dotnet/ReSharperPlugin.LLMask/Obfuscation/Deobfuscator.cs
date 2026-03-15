@@ -20,7 +20,9 @@ public static class Deobfuscator
     public static string? ExtractSessionId(string text)
     {
         if (!text.StartsWith(LLMaskMapping.MarkerPrefix, System.StringComparison.Ordinal))
+        {
             return null;
+        }
 
         var lineEnd = text.IndexOf('\n');
         var line = lineEnd >= 0

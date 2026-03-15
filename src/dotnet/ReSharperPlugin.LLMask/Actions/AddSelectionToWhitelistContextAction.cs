@@ -33,23 +33,29 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
     private List<string>? _newWords;
 
     public override string Text =>
-        _newWords is { Count: > 0 }
-            ? $"LLMask: Add {_newWords.Count} identifier{(_newWords.Count == 1 ? "" : "s")} to whitelist"
+        this._newWords is { Count: > 0 }
+            ? $"LLMask: Add {this._newWords.Count} identifier{(this._newWords.Count == 1 ? "" : "s")} to whitelist"
             : "LLMask: Add selection identifiers to whitelist";
 
     public override bool IsAvailable(IUserDataHolder cache)
     {
         // Require a real selection.
         if (provider.DocumentSelection.IsEmpty)
+        {
             return false;
+        }
 
         var psiFile = provider.PsiFile as ICSharpFile;
         if (psiFile == null)
+        {
             return false;
+        }
 
         var element = provider.GetSelectedElement<ITreeNode>();
         if (element == null)
+        {
             return false;
+        }
 
         // Only show when at least one obfuscation mode is active.
         var settings = element.GetSolution()
@@ -65,17 +71,20 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
         var existing  = ParseWhitelist(settings.CustomWhitelist);
         var excluded  = new HashSet<string>(existing.Concat(config.BaseWhitelist), StringComparer.Ordinal);
 
-        _newWords = CollectNewIdentifiers(psiFile, provider.DocumentSelection.TextRange, excluded);
-        return _newWords.Count > 0;
+        this._newWords = CollectNewIdentifiers(psiFile, provider.DocumentSelection.TextRange, excluded);
+        return this._newWords.Count > 0;
     }
 
     protected override Action<ITextControl> ExecutePsiTransaction(ISolution solution, IProgressIndicator progress)
     {
-        var toAdd = _newWords;
+        var toAdd = this._newWords;
 
         return _ =>
         {
-            if (toAdd == null || toAdd.Count == 0) return;
+            if (toAdd == null || toAdd.Count == 0)
+            {
+                return;
+            }
 
             var store = solution.GetComponent<ISettingsStore>()
                 .BindToContextTransient(ContextRange.ApplicationWide);
@@ -85,7 +94,10 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
 
             // Re-check at write time in case another action ran concurrently.
             var actuallyNew = toAdd.Where(w => !existing.Contains(w)).ToList();
-            if (actuallyNew.Count == 0) return;
+            if (actuallyNew.Count == 0)
+            {
+                return;
+            }
 
             existing.UnionWith(actuallyNew);
             store.SetValue((LLMaskSettings s) => s.CustomWhitelist,
@@ -111,24 +123,34 @@ public class AddSelectionToWhitelistContextAction(ICSharpContextActionDataProvid
         foreach (var token in psiFile.Descendants<ITokenNode>())
         {
             if (token.GetTokenType() != CSharpTokenType.IDENTIFIER)
+            {
                 continue;
+            }
 
             // Only tokens that start inside the selection.
             var tokenRange = token.GetDocumentRange().TextRange;
             if (!selRange.Contains(tokenRange.StartOffset))
+            {
                 continue;
+            }
 
             var name = token.GetText();
 
             // Skip single-character identifiers — they carry no proprietary information.
             if (name.Length <= 1)
+            {
                 continue;
+            }
 
             if (excluded.Contains(name))
+            {
                 continue;
+            }
 
             if (seen.Add(name))
+            {
                 result.Add(name);
+            }
         }
 
         return result;

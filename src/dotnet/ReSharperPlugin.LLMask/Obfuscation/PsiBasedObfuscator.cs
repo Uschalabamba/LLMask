@@ -52,11 +52,12 @@ public static class PsiBasedObfuscator
         IEnumerable<string>? basePreservedWords = null,
         bool sortByFrequency = true,
         bool useAssemblyResolution = true,
-        IEnumerable<string>? wellKnownRoots = null)
+        IEnumerable<string>? wellKnownRoots = null,
+        IEnumerable<string>? preservedStringContents = null)
     {
         var (fullOutput, mapping, _) = ObfuscateCore(file, extraPreservedWords, basePreservedWords,
             sortByFrequency, useAssemblyResolution, wellKnownRoots,
-            buildTokenMap: false);
+            buildTokenMap: false, preservedStringContents: preservedStringContents);
         return (fullOutput, mapping);
     }
 
@@ -75,7 +76,8 @@ public static class PsiBasedObfuscator
         bool sortByFrequency = true,
         bool useAssemblyResolution = true,
         IEnumerable<string>? wellKnownRoots = null,
-        bool buildTokenMap = false)
+        bool buildTokenMap = false,
+        IEnumerable<string>? preservedStringContents = null)
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
@@ -90,6 +92,10 @@ public static class PsiBasedObfuscator
         var wellKnownRootsSet = wellKnownRoots != null
             ? new HashSet<string>(wellKnownRoots, StringComparer.Ordinal)
             : DefaultWellKnownRoots.Value;
+
+        HashSet<string>? preservedStrings = preservedStringContents != null
+            ? new HashSet<string>(preservedStringContents, StringComparer.Ordinal)
+            : null;
 
         var strCounters = new int[3]; // [0] str  [1] path  [2] url
         var strMap = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -163,7 +169,9 @@ public static class PsiBasedObfuscator
             {
                 var abbr = TryGetTypeAbbreviationPrefix(localDecl, wellKnownRootsSet, abbrToType);
                 if (abbr != null)
+                {
                     prefix = abbr;
+                }
             }
 
             declaredPrefix[name] = prefix;
@@ -293,7 +301,9 @@ public static class PsiBasedObfuscator
                     // is Brushes → adds "Brushes" as well.
                     var typeShortName = containingType.GetClrName().ShortName;
                     if (!string.IsNullOrEmpty(typeShortName) && typeShortName.Length > 1)
+                    {
                         resolvedSafeNames.Add(typeShortName);
+                    }
                 }
             }
 
@@ -306,30 +316,44 @@ public static class PsiBasedObfuscator
             {
                 var typeName = typeUsage.ScalarTypeName;
                 if (typeName == null)
+                {
                     continue;
+                }
 
                 var name = typeName.ShortName;
                 if (string.IsNullOrEmpty(name) || name.Length <= 1)
+                {
                     continue;
+                }
 
                 if (resolvedSafeNames.Contains(name))
+                {
                     continue; // already resolved
+                }
 
                 if (baseWords.Contains(name) || (extra != null && extra.Contains(name)))
+                {
                     continue;
+                }
 
                 var element = typeName.Reference?.Resolve().DeclaredElement as ITypeElement;
                 if (element == null)
+                {
                     continue;
+                }
 
                 var fullTypeName = element.GetClrName().FullName;
                 var firstDot = fullTypeName.IndexOf('.');
                 if (firstDot <= 0)
+                {
                     continue;
+                }
 
                 var nsRoot = fullTypeName.Substring(0, firstDot);
                 if (wellKnownRootsSet.Contains(nsRoot))
+                {
                     resolvedSafeNames.Add(name);
+                }
             }
 
             // ── Pass 1c (object initialiser properties) ───────────────────────────
@@ -344,26 +368,38 @@ public static class PsiBasedObfuscator
             {
                 var name = propInit.MemberName;
                 if (string.IsNullOrEmpty(name) || name.Length <= 1)
+                {
                     continue;
+                }
 
                 if (resolvedSafeNames.Contains(name))
+                {
                     continue;
+                }
 
                 if (baseWords.Contains(name) || (extra != null && extra.Contains(name)))
+                {
                     continue;
+                }
 
                 var element = propInit.Reference?.Resolve().DeclaredElement as ITypeMember;
                 if (element == null)
+                {
                     continue;
+                }
 
                 var containingType = element.ContainingType;
                 if (containingType == null)
+                {
                     continue;
+                }
 
                 var fullTypeName = containingType.GetClrName().FullName;
                 var firstDot = fullTypeName.IndexOf('.');
                 if (firstDot <= 0)
+                {
                     continue;
+                }
 
                 var nsRoot = fullTypeName.Substring(0, firstDot);
                 if (wellKnownRootsSet.Contains(nsRoot))
@@ -373,7 +409,79 @@ public static class PsiBasedObfuscator
                     // enrichment as the IReferenceExpression path above).
                     var typeShortName = containingType.GetClrName().ShortName;
                     if (!string.IsNullOrEmpty(typeShortName) && typeShortName.Length > 1)
+                    {
                         resolvedSafeNames.Add(typeShortName);
+                    }
+                }
+            }
+
+            // ── Pass 1c (attributes): walk IAttribute nodes ───────────────────────
+            // Attribute type references ([Test], [SetUp], [Fact], etc.) are NOT reached
+            // by the IReferenceExpression or IUserTypeUsage passes above — attributes use
+            // a distinct PSI node structure.  Walk IAttribute nodes and resolve each via
+            // its Name.Reference to get the attribute class, then check namespace roots.
+            foreach (var attr in file.Descendants<IAttribute>())
+            {
+                var attrName = attr.Name;
+                if (attrName == null)
+                {
+                    continue;
+                }
+
+                var shortName = attrName.ShortName;
+                if (string.IsNullOrEmpty(shortName) || shortName.Length <= 1)
+                {
+                    continue;
+                }
+
+                if (resolvedSafeNames.Contains(shortName))
+                {
+                    continue;
+                }
+
+                if (baseWords.Contains(shortName) || (extra != null && extra.Contains(shortName)))
+                {
+                    continue;
+                }
+
+                var element = attrName.Reference?.Resolve().DeclaredElement as ITypeElement;
+                if (element == null)
+                {
+                    continue;
+                }
+
+                var fullTypeName = element.GetClrName().FullName;
+                var firstDot = fullTypeName.IndexOf('.');
+                if (firstDot <= 0)
+                {
+                    continue;
+                }
+
+                if (!wellKnownRootsSet.Contains(fullTypeName.Substring(0, firstDot)))
+                {
+                    continue;
+                }
+
+                // Preserve the name as written in source (e.g. "Test" for [Test]).
+                resolvedSafeNames.Add(shortName);
+
+                // Also preserve the full class short name when it differs (e.g. "TestAttribute").
+                var classShortName = element.GetClrName().ShortName;
+                if (!string.IsNullOrEmpty(classShortName) && classShortName.Length > 1 && classShortName != shortName)
+                {
+                    resolvedSafeNames.Add(classShortName);
+                }
+
+                // And the bare name without the conventional "Attribute" suffix.
+                const string attrSuffix = "Attribute";
+                if (classShortName.EndsWith(attrSuffix, StringComparison.Ordinal) &&
+                    classShortName.Length > attrSuffix.Length)
+                {
+                    var bare = classShortName.Substring(0, classShortName.Length - attrSuffix.Length);
+                    if (bare.Length > 1 && bare != shortName)
+                    {
+                        resolvedSafeNames.Add(bare);
+                    }
                 }
             }
         }
@@ -497,9 +605,9 @@ public static class PsiBasedObfuscator
             else if (tokenType.IsStringLiteralToken())
             {
                 var content = StringBasedObfuscator.ExtractStringContent(raw);
-                if (content.Length == 1)
+                if (content.Length == 1 || (preservedStrings != null && preservedStrings.Contains(content)))
                 {
-                    sb.Append(raw); // single-char strings carry no proprietary information
+                    sb.Append(raw); // single-char or whitelisted strings pass through verbatim
                 }
                 else
                 {
@@ -800,9 +908,16 @@ public static class PsiBasedObfuscator
         Dictionary<string, string> abbrToType)
     {
         // Works for both explicit types and var-inferred types.
-        if (decl.DeclaredElement is not ILocalVariable localVar) return null;
+        if (decl.DeclaredElement is not ILocalVariable localVar)
+        {
+            return null;
+        }
+
         // Skip non-named types (arrays, pointers, type parameters, …).
-        if (localVar.Type is not IDeclaredType declaredType) return null;
+        if (localVar.Type is not IDeclaredType declaredType)
+        {
+            return null;
+        }
 
         // GetTypeElement() requires an active CompilationContextCookie to resolve
         // the module reference context.  Without one the PSI layer logs a
@@ -815,16 +930,29 @@ public static class PsiBasedObfuscator
         {
             typeElement = declaredType.GetTypeElement();
         }
-        if (typeElement == null) return null;
+        if (typeElement == null)
+        {
+            return null;
+        }
 
         var fullName = typeElement.GetClrName().FullName;
         var firstDot = fullName.IndexOf('.');
-        if (firstDot <= 0) return null;                                        // no namespace
-        if (!wellKnownRoots.Contains(fullName.Substring(0, firstDot))) return null; // proprietary
+        if (firstDot <= 0)
+        {
+            return null;                                        // no namespace
+        }
+
+        if (!wellKnownRoots.Contains(fullName.Substring(0, firstDot)))
+        {
+            return null; // proprietary
+        }
 
         // ShortName strips generic arity suffix: "List`1" → "List", "Dictionary`2" → "Dictionary"
         var shortName = typeElement.GetClrName().ShortName;
-        if (string.IsNullOrEmpty(shortName)) return null;
+        if (string.IsNullOrEmpty(shortName))
+        {
+            return null;
+        }
 
         return ResolveAbbreviation(shortName, abbrToType);
     }
@@ -844,7 +972,10 @@ public static class PsiBasedObfuscator
         // Require at least 2 characters so single-component type names (Int32 → "i",
         // List → "l", Random → "r") don't get abbreviated — they'd produce noisy
         // single-letter prefixes indistinguishable from loop counters or local chars.
-        if (level1.Length < 2) return "localVar";
+        if (level1.Length < 2)
+        {
+            return "localVar";
+        }
 
         if (!abbrToType.TryGetValue(level1, out var owner) || owner == shortName)
         {
@@ -854,7 +985,11 @@ public static class PsiBasedObfuscator
 
         // Level 1 already claimed by a different type — escalate.
         var level2 = ExtractInitialsWithNext(shortName);
-        if (level2.Length == 0) return "localVar";
+        if (level2.Length == 0)
+        {
+            return "localVar";
+        }
+
         abbrToType[level2] = shortName; // no further collision handling needed
         return level2;
     }
@@ -866,7 +1001,9 @@ public static class PsiBasedObfuscator
         foreach (var c in name)
         {
             if (char.IsUpper(c))
+            {
                 sb.Append(char.ToLowerInvariant(c));
+            }
         }
         return sb.ToString();
     }
@@ -880,10 +1017,16 @@ public static class PsiBasedObfuscator
         var sb = new StringBuilder();
         for (var i = 0; i < name.Length; i++)
         {
-            if (!char.IsUpper(name[i])) continue;
+            if (!char.IsUpper(name[i]))
+            {
+                continue;
+            }
+
             sb.Append(char.ToLowerInvariant(name[i]));
             if (i + 1 < name.Length && !char.IsUpper(name[i + 1]))
+            {
                 sb.Append(name[i + 1]);
+            }
         }
         return sb.ToString();
     }

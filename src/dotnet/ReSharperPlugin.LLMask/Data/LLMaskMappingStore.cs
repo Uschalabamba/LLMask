@@ -31,19 +31,25 @@ public static class LLMaskMappingStore
     {
         var path = FilePath(solutionRoot);
         if (!File.Exists(path))
+        {
             return null;
+        }
 
         var text = File.ReadAllText(path, Encoding.UTF8);
         var sessions = ParseSessions(text);
         if (sessions.Count == 0)
+        {
             return null;
+        }
 
         if (sessionId != null)
         {
             foreach (var s in sessions)
             {
                 if (string.Equals(s.SessionId, sessionId, StringComparison.Ordinal))
+                {
                     return s;
+                }
             }
         }
 
@@ -130,9 +136,14 @@ public static class LLMaskMappingStore
                 case '\t': sb.Append("\\t");  break;
                 default:
                     if (c < 0x20)
+                    {
                         sb.Append($"\\u{(int)c:x4}");
+                    }
                     else
+                    {
                         sb.Append(c);
+                    }
+
                     break;
             }
         }
@@ -148,26 +159,46 @@ public static class LLMaskMappingStore
         var result = new List<LLMaskMapping>();
         // Find the "sessions" array
         var sessionsStart = json.IndexOf("\"sessions\"", StringComparison.Ordinal);
-        if (sessionsStart < 0) return result;
+        if (sessionsStart < 0)
+        {
+            return result;
+        }
 
         var arrayStart = json.IndexOf('[', sessionsStart);
-        if (arrayStart < 0) return result;
+        if (arrayStart < 0)
+        {
+            return result;
+        }
 
         var pos = arrayStart + 1;
         while (pos < json.Length)
         {
             // Skip whitespace
             while (pos < json.Length && char.IsWhiteSpace(json[pos])) pos++;
-            if (pos >= json.Length) break;
-            if (json[pos] == ']') break;
+            if (pos >= json.Length)
+            {
+                break;
+            }
+
+            if (json[pos] == ']')
+            {
+                break;
+            }
+
             if (json[pos] != '{') { pos++; continue; }
 
             var sessionEnd = FindMatchingBrace(json, pos);
-            if (sessionEnd < 0) break;
+            if (sessionEnd < 0)
+            {
+                break;
+            }
 
             var sessionJson = json.Substring(pos, sessionEnd - pos + 1);
             var session = ParseSession(sessionJson);
-            if (session != null) result.Add(session);
+            if (session != null)
+            {
+                result.Add(session);
+            }
 
             pos = sessionEnd + 1;
             // Skip comma
@@ -181,7 +212,10 @@ public static class LLMaskMappingStore
     {
         var id        = ReadStringField(json, "id");
         var timestamp = ReadStringField(json, "timestamp");
-        if (id == null || timestamp == null) return null;
+        if (id == null || timestamp == null)
+        {
+            return null;
+        }
 
         var idMap  = ReadMapField(json, "id_map");
         var strMap = ReadMapField(json, "str_map");
@@ -193,13 +227,22 @@ public static class LLMaskMappingStore
     {
         var key = $"\"{fieldName}\"";
         var idx = json.IndexOf(key, StringComparison.Ordinal);
-        if (idx < 0) return null;
+        if (idx < 0)
+        {
+            return null;
+        }
 
         var colon = json.IndexOf(':', idx + key.Length);
-        if (colon < 0) return null;
+        if (colon < 0)
+        {
+            return null;
+        }
 
         var strStart = json.IndexOf('"', colon + 1);
-        if (strStart < 0) return null;
+        if (strStart < 0)
+        {
+            return null;
+        }
 
         return ReadJsonString(json, strStart, out _);
     }
@@ -209,16 +252,28 @@ public static class LLMaskMappingStore
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         var key = $"\"{fieldName}\"";
         var idx = json.IndexOf(key, StringComparison.Ordinal);
-        if (idx < 0) return result;
+        if (idx < 0)
+        {
+            return result;
+        }
 
         var colon = json.IndexOf(':', idx + key.Length);
-        if (colon < 0) return result;
+        if (colon < 0)
+        {
+            return result;
+        }
 
         var braceStart = json.IndexOf('{', colon + 1);
-        if (braceStart < 0) return result;
+        if (braceStart < 0)
+        {
+            return result;
+        }
 
         var braceEnd = FindMatchingBrace(json, braceStart);
-        if (braceEnd < 0) return result;
+        if (braceEnd < 0)
+        {
+            return result;
+        }
 
         var pos = braceStart + 1;
         while (pos < braceEnd)
@@ -227,18 +282,33 @@ public static class LLMaskMappingStore
             if (pos >= braceEnd || json[pos] != '"') { pos++; continue; }
 
             var keyStr = ReadJsonString(json, pos, out var afterKey);
-            if (keyStr == null) break;
+            if (keyStr == null)
+            {
+                break;
+            }
+
             pos = afterKey;
 
             var colonPos = json.IndexOf(':', pos);
-            if (colonPos < 0 || colonPos > braceEnd) break;
+            if (colonPos < 0 || colonPos > braceEnd)
+            {
+                break;
+            }
+
             pos = colonPos + 1;
 
             while (pos < braceEnd && char.IsWhiteSpace(json[pos])) pos++;
-            if (pos >= braceEnd || json[pos] != '"') break;
+            if (pos >= braceEnd || json[pos] != '"')
+            {
+                break;
+            }
 
             var valStr = ReadJsonString(json, pos, out var afterVal);
-            if (valStr == null) break;
+            if (valStr == null)
+            {
+                break;
+            }
+
             pos = afterVal;
 
             result[keyStr] = valStr;
@@ -252,7 +322,10 @@ public static class LLMaskMappingStore
     private static string? ReadJsonString(string json, int quoteStart, out int afterEnd)
     {
         afterEnd = quoteStart;
-        if (quoteStart >= json.Length || json[quoteStart] != '"') return null;
+        if (quoteStart >= json.Length || json[quoteStart] != '"')
+        {
+            return null;
+        }
 
         var sb = new StringBuilder();
         var i = quoteStart + 1;
@@ -273,7 +346,10 @@ public static class LLMaskMappingStore
                     case 'u' when i + 4 < json.Length:
                         var hex = json.Substring(i + 1, 4);
                         if (int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var code))
+                        {
                             sb.Append((char)code);
+                        }
+
                         i += 4;
                         break;
                     default: sb.Append(json[i]); break;
@@ -297,12 +373,23 @@ public static class LLMaskMappingStore
             if (inString)
             {
                 if (json[i] == '\\') { i++; continue; }
-                if (json[i] == '"') inString = false;
+                if (json[i] == '"')
+                {
+                    inString = false;
+                }
+
                 continue;
             }
             if (json[i] == '"') { inString = true; continue; }
-            if (json[i] == '{') depth++;
-            else if (json[i] == '}') { depth--; if (depth == 0) return i; }
+            if (json[i] == '{')
+            {
+                depth++;
+            }
+            else if (json[i] == '}') { depth--; if (depth == 0)
+                {
+                    return i;
+                }
+            }
         }
         return -1;
     }

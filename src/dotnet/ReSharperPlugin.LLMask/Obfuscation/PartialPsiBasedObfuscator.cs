@@ -30,7 +30,8 @@ public static class PartialPsiBasedObfuscator
         IEnumerable<string>? basePreservedWords      = null,
         bool sortByFrequency                         = true,
         bool useAssemblyResolution                   = true,
-        IEnumerable<string>? wellKnownNamespaceRoots = null)
+        IEnumerable<string>? wellKnownNamespaceRoots = null,
+        IEnumerable<string>? preservedStringContents = null)
     {
         var (fullOutput, mapping, tokenMap) = PsiBasedObfuscator.ObfuscateCore(
             file,
@@ -39,7 +40,8 @@ public static class PartialPsiBasedObfuscator
             sortByFrequency,
             useAssemblyResolution,
             wellKnownNamespaceRoots,
-            buildTokenMap: true);
+            buildTokenMap: true,
+            preservedStringContents: preservedStringContents);
 
         var carved = tokenMap is { Count: > 0 }
             ? CarveSelection(fullOutput, tokenMap, selectionRange)

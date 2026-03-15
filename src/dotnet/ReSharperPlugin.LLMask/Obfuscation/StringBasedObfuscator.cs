@@ -58,7 +58,8 @@ public static class StringBasedObfuscator
     public static (string output, LLMaskMapping mapping) Obfuscate(
         string code,
         IEnumerable<string>? extraPreservedWords = null,
-        IEnumerable<string>? basePreservedWords = null)
+        IEnumerable<string>? basePreservedWords = null,
+        IEnumerable<string>? preservedStringContents = null)
     {
         var baseWords = basePreservedWords != null
             ? new HashSet<string>(basePreservedWords, StringComparer.Ordinal)
@@ -70,6 +71,10 @@ public static class StringBasedObfuscator
             extra = new HashSet<string>(extraPreservedWords, StringComparer.Ordinal);
             extra.ExceptWith(baseWords); // skip words already in the base list
         }
+
+        HashSet<string>? preservedStrings = preservedStringContents != null
+            ? new HashSet<string>(preservedStringContents, StringComparer.Ordinal)
+            : null;
 
         // id:  [0] TypeName  [1] localVar  [2] _field  [3] CONST_
         var idCounters  = new int[4];
@@ -99,9 +104,9 @@ public static class StringBasedObfuscator
                      || m.Groups["RegularString"].Success)
             {
                 var content = ExtractStringContent(raw);
-                if (content.Length == 1)
+                if (content.Length == 1 || (preservedStrings != null && preservedStrings.Contains(content)))
                 {
-                    sb.Append(raw); // single-char strings carry no proprietary information
+                    sb.Append(raw); // single-char or whitelisted strings pass through verbatim
                 }
                 else
                 {
