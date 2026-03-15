@@ -35,9 +35,7 @@ public class ObfuscateAndCopyContextAction(ICSharpContextActionDataProvider prov
             return false;
         }
 
-        // Hide the context action entirely when string-based obfuscation is disabled.
-        // We read settings via the selected element's solution so we don't inject
-        // ISettingsStore in the constructor (which would silently break the factory).
+        // Hide the context action entirely when string-based obfuscation is disabled
         var settings = element.GetSolution()
             .GetComponent<ISettingsStore>()
             .BindToContextTransient(ContextRange.ApplicationWide)

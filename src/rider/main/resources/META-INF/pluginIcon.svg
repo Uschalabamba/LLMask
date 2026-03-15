@@ -1,0 +1,14 @@
+<svg width="680" height="680" viewBox="0 0 680 680" xmlns="http://www.w3.org/2000/svg">
+  <rect x="140" y="60" width="400" height="540" rx="60" fill="#0d1117"/>
+  <ellipse cx="340" cy="270" rx="152" ry="74" fill="#2dd4bf"/>
+  <ellipse cx="283" cy="264" rx="40" ry="35" fill="#0d1117"/>
+  <ellipse cx="397" cy="264" rx="40" ry="35" fill="#0d1117"/>
+  <rect x="330" y="336" width="20" height="28" rx="4" fill="#2dd4bf" opacity="0.6"/>
+  <rect x="200" y="400" width="280" height="13" rx="4" fill="#ffffff18"/>
+  <rect x="200" y="400" width="130" height="13" rx="4" fill="#2dd4bf"/>
+  <rect x="200" y="425" width="240" height="13" rx="4" fill="#ffffff18"/>
+  <rect x="265" y="425" width="95" height="13" rx="4" fill="#2dd4bf"/>
+  <rect x="200" y="450" width="200" height="13" rx="4" fill="#ffffff18"/>
+  <rect x="200" y="450" width="65" height="13" rx="4" fill="#2dd4bf"/>
+  <text x="340" y="538" text-anchor="middle" font-family="monospace" font-size="22" font-weight="600" fill="#2dd4bf" letter-spacing="3">LLMask</text>
+</svg>

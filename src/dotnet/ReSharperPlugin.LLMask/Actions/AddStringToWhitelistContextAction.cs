@@ -41,17 +41,23 @@ public class AddStringToWhitelistContextAction(ICSharpContextActionDataProvider 
         // Must be on a string literal token.
         var literal = provider.GetSelectedElement<ILiteralExpression>();
         if (literal == null)
+        {
             return false;
+        }
 
         var tokenType = literal.Literal.GetTokenType();
         if (!tokenType.IsStringLiteralToken())
+        {
             return false;
+        }
 
         var content = StringBasedObfuscator.ExtractStringContent(literal.Literal.GetText());
 
         // Single-char strings are never obfuscated — no need to whitelist them.
         if (content.Length <= 1)
+        {
             return false;
+        }
 
         // Don't show if already in the custom string whitelist.
         var settings = literal.GetSolution()
@@ -60,7 +66,9 @@ public class AddStringToWhitelistContextAction(ICSharpContextActionDataProvider 
             .GetKey<LLMaskSettings>(SettingsOptimization.DoMeSlowly);
 
         if (ParseStringWhitelist(settings.CustomStringWhitelist).Contains(content, StringComparer.Ordinal))
+        {
             return false;
+        }
 
         this.stringContent = content;
         return true;
@@ -73,7 +81,9 @@ public class AddStringToWhitelistContextAction(ICSharpContextActionDataProvider 
         return _ =>
         {
             if (content == null)
+            {
                 return;
+            }
 
             var store = solution.GetComponent<ISettingsStore>()
                 .BindToContextTransient(ContextRange.ApplicationWide);

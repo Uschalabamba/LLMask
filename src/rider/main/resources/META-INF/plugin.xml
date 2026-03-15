@@ -1,14 +1,54 @@
 <idea-plugin require-restart="true">
   <id>com.jetbrains.rider.plugins.llmask</id>
   <name>LLMask</name>
-  <version>_PLACEHOLDER_</version>
-  <vendor url="https://project-url">Author</vendor>
+  <version>0.1.0-beta.1</version>
+  <vendor url="https://github.com/Uschalabamba/LLMask">Uschalabamba</vendor>
   <idea-version since-build="_PLACEHOLDER_" until-build="_PLACEHOLDER_" />
   <depends>com.intellij.modules.rider</depends>
 
   <description>
 <![CDATA[
-<p>Sample description</p>
+<h2>LLMask — Privacy-preserving code sharing for LLMs</h2>
+
+<p>
+  LLMask obfuscates sensitive identifiers and string literals in your C# code before you send
+  it to an AI assistant, then translates the AI's response back to your real names — so your
+  proprietary domain vocabulary never leaves your machine.
+</p>
+
+<h3>Features</h3>
+<ul>
+  <li><b>Whole-file obfuscation</b> — right-click any C# file in the Project view and copy an
+      obfuscated version to the clipboard in one step.</li>
+  <li><b>Selection obfuscation</b> — context action on any highlighted block for surgical,
+      PSI-aware masking of just the code you need help with.</li>
+  <li><b>Smart identifier preservation</b> — well-known framework names (BCL, ASP.NET, NUnit,
+      xUnit, Moq, Entity Framework, and more) and single-letter variables are never obfuscated,
+      keeping AI responses meaningful.</li>
+  <li><b>String literal obfuscation</b> — replaces sensitive string values with neutral
+      placeholders alongside identifier obfuscation.</li>
+  <li><b>Custom whitelists</b> — add any identifier or string literal to a personal keep-list
+      via a right-click context action or the Settings page, so your chosen names are always
+      left as-is.</li>
+  <li><b>One-click deobfuscation</b> — paste the AI's response into your clipboard and run
+      <em>LLMask: Deobfuscate clipboard</em> from the Tools menu to restore all original
+      names automatically.</li>
+  <li><b>Session mapping files</b> — mappings are persisted per solution in
+      <code>.llmask-map.json</code>, with automatic pruning of sessions older than 30 days.</li>
+</ul>
+
+<h3>Usage</h3>
+<ol>
+  <li>Right-click a <code>.cs</code> file → <em>LLMask: Obfuscate and copy to clipboard</em>.</li>
+  <li>Paste into your favourite AI chat.</li>
+  <li>Copy the AI's response to the clipboard.</li>
+  <li><em>Tools → LLMask: Deobfuscate clipboard</em> — done.</li>
+</ol>
+
+<p>
+  Configure the whitelist and toggle string obfuscation under
+  <em>Settings → Tools → LLMask</em>.
+</p>
 ]]>
   </description>
 
